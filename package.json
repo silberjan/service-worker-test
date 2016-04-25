@@ -1,0 +1,23 @@
+{
+  "name": "service-worker-test",
+  "version": "0.0.1",
+  "description": "Playground for the Service Worker API",
+  "main": "Gruntfile.js",
+  "dependencies": {
+    "grunt": "^1.0.1"
+  },
+  "devDependencies": {
+    "grunt-browser-sync": "^2.2.0",
+    "grunt-contrib-watch": "^1.0.0",
+    "grunt-sass": "^1.1.0"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [
+    "service",
+    "worker"
+  ],
+  "author": "Jan Silbersiepe <jan.silbersiepe@posteo.de>",
+  "license": "ISC"
+}
