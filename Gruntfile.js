@@ -37,8 +37,13 @@ module.exports = function(grunt) {
           },
           options: {
               watchTask: true,
+              port: 1337,
               server: {
-                  baseDir: "./"
+                  baseDir: "./",
+                  middleware: function (req, res, next) {
+                      res.setHeader('Access-Control-Allow-Origin', '*');
+                      next();
+                  }
               }
           }
       },
