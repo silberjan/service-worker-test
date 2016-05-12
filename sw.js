@@ -20,21 +20,31 @@ function handleUncachedRequest(request) {
 	return fetch(request);
 };
 
-function handleVideo(event) {	
-	// get the video and store it in localforage
-	var request = new Request(event.request.url);
-	fetch(request)
-		.then((response) => {
-			return response.blob();
-		})
-		.then((blob) => {
-			localforage.setItem(event.request.url, blob, function (item, err) {
-			console.log("Finished downloading and storing video.", blob);
-		});
-	});
+function handleVideo(event) {
+	var url = event.request.url;
 	
-	// return the normal video from the server
-	return fetch(event.request);
+	// check if we already have the video in the localforage
+	return localforage.getItem(url).then((item) => {
+		if (item === null) {
+			// we do not yet have the video, so load it and store it...
+			var request = new Request(url);
+			fetch(request)
+				.then((response) => {
+					return response.blob();
+				})
+				.then((blob) => {
+					localforage.setItem(url, blob, function (item, err) {
+					console.log("Finished downloading and storing video."+url, blob);
+				});
+			});
+			
+			// ... and at the same time supply the video from the external server
+			return fetch(event.request);			
+		}
+
+		// we have the video in localforage, so just return the requested part
+		return new Response(item);
+	});
 }
 
 this.addEventListener('fetch',(event) => {
