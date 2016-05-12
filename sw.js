@@ -1,13 +1,15 @@
 'use strict';
 
+this.importScripts("/js/localforage.js");
+
 // Service worker install event
 this.addEventListener('install', (event) => {
   event.waitUntil(
     caches.open('v1').then((cache) => {
       return cache.addAll([
-        '/', // index.html
+        '/',
         '/index.html',
-        '/js/main.js', //js
+        '/js/main.js',
       ]);
     })
   );
@@ -15,11 +17,6 @@ this.addEventListener('install', (event) => {
 });
 
 function handleUncachedRequest(request) {
-  // if (request.url.includes('.jpg')) {
-  //   caches.open('images').then((cache) => {
-  //     return cache.add(request);
-  //   });
-  // }
   return fetch(request);
 };
 
@@ -34,17 +31,3 @@ this.addEventListener('fetch',(event) => {
   );
 
 });
-
-
-
-// this.addEventListener('foreignFetch',function(event){
-//   console.log('Foreign request ' + event.request.url + ' is being fetched');
-// });
-
-// self.addEventListener('activate', function(event) {
-//   console.log('Activated', event);
-// });
-// self.addEventListener('push', function(event) {
-//   console.log('Push message received', event);
-//   // TODO
-// });
