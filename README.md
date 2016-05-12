@@ -10,12 +10,15 @@
 An array of all currently saved videos is held persistently so asynchronous existence checks are possible (querying the IndexedDB through _localforage_ is asynchronous).
 
 For every request of a .mp4 video the Service Worker intercepts:
+
 1. Check whether we already stored the video in IndexedDB by looking it up in the array.
-1. If it has **already been stored**:
+
+2. If it has **already been stored**:
    - Get the video from the IndexedDB as a `blob`.
    - Slice the requested part out of the video according to the request's `range` header.
    - Send a response with code `206 Partial Content` containing the video data. This allows the user to skip around in the video.
-1. If the video is **not yet stored**:
+   
+3. If the video is **not yet stored**:
    - Send a separate request to the video server and retrieve the video as a `blob`.
    - Store the video in the IndexedDB via *localforage*.
    - **The initial intercepted request is not handled any further.** This triggers the browser to handle it itself again. Using the usual method of just calling `event.respondWith(fetch(request))` like with other requests I ran into the following problems:
