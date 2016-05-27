@@ -6,9 +6,14 @@ var CACHE_VERSION = 'v1';
 // array to store the URLs of all the currently stored videos so we can synchronously
 // decide whether to use a fallback response
 var indexedVideos = [];
+var videoStore;
+var requestStore;
 
 // Service worker install event
 self.addEventListener('install', installServiceWorker);
+
+// TODO: perform cleanup of caches
+// https://github.com/GoogleChrome/samples/blob/gh-pages/service-worker/offline-analytics/service-worker.js#L121
 
 // Service worker fetch event
 self.addEventListener('fetch', handleFetch);
@@ -21,8 +26,7 @@ self.addEventListener('fetch', handleFetch);
 function installServiceWorker(event) {
   event.waitUntil(
     Promise.all([
-      setupStaticsCache(),
-      setupVideoCache()
+      setupStaticsCache()
     ])
   );
   console.log('Installed', event);
@@ -34,20 +38,35 @@ function setupStaticsCache() {
     return cache.addAll([
       '/',
       '/index.html',
-      '/js/main.js'
+      '/js/main.js',
+      '/js/localforage.js'
     ]);
   })
 }
 
+setupVideoCache();
+setupRequestStore();
+
 // gather all URLs of currently stored videos
 function setupVideoCache() {
-  localforage.keys().then(function(keys) {
-    indexedVideos = keys.filter(function(key) {
-      return key.indexOf('.mp4') >= 0;
-    });
-  })
+  videoStore = localforage.createInstance({
+    name: 'videoStore',
+    description: 'Stores cached videos.'
+  });
+
+  videoStore.keys().then(function(keys) {
+    indexedVideos = keys;
+  });
 }
 
+function setupRequestStore() {
+  requestStore = localforage.createInstance({
+    name: 'requestStore',
+    description: 'Stores POST requests that could not be saved to the server.'
+  });
+
+  replayPOSTRequests();
+}
 
 ///////////
 // FETCH //
@@ -71,7 +90,7 @@ function handleStaticsFetch(event) {
         return response;
       }
       console.log("Cache Miss", event.request);
-      return handleUncachedRequest(event.request);
+      return handleUncachedRequest(event);
     }).catch(function() {
       console.log("Fallback", event.request);
       return new Response('fallback');
@@ -105,15 +124,102 @@ function handleVideoFetch(event) {
 // HELPERS //
 /////////////
 
-function handleUncachedRequest(request) {
-  return fetch(request);
+function handleUncachedRequest(event) {
+  return fetch(event.request.clone()).then(function(response) {
+    console.log('  Response for %s from network is: %O', event.request.url, response);
+
+    // Optional: add in extra conditions here, e.g. response.type == 'basic' to only cache
+    // responses from the same domain. See https://fetch.spec.whatwg.org/#concept-response-type
+    if (response.status < 400) {
+      // This avoids caching responses that we know are errors (i.e. HTTP status code of 4xx or 5xx).
+      // One limitation is that, for non-CORS requests, we get back a filtered opaque response
+      // (https://fetch.spec.whatwg.org/#concept-filtered-response-opaque) which will always have a
+      // .status of 0, regardless of whether the underlying HTTP call was successful. Since we're
+      // blindly caching those opaque responses, we run the risk of caching a transient error response.
+      //
+      // We need to call .clone() on the response object to save a copy of it to the cache.
+      // (https://fetch.spec.whatwg.org/#dom-request-clone)
+      // TODO: decide what we want to cache
+      // cache.put(event.request, response.clone());
+
+      // seams to work, so lets check to send our queued requests.
+      replayPOSTRequests();
+    } else if (response.status >= 500) {
+      // If this is a POST request we want to retry it if a HTTP 5xx response
+      // was returned, just like we'd retry it if the network was down.
+      checkForPOSTRequest(event);
+    }
+
+    // Return the original response object, which will be used to fulfill the resource request.
+    return response;
+  }).catch(function(error) {
+    // The catch() will be triggered for network failures. Let's see if it was a request we
+    // are looking for, and save it to be retried if it was.
+    checkForPOSTRequest(event);
+
+    // TODO: decide if we want to return a custom response
+    throw error;
+  });
+}
+
+function checkForPOSTRequest(event) {
+  if (event.request.method === 'POST') {
+    savePOSTRequest(event);
+  }
+  // TODO have to handle OPTIONS requests?
+}
+
+function savePOSTRequest(event) {
+  event.request.json().then(function(body) {
+    // TODO: may have to store auth headers
+    var timestamp = Date.now();
+    var save = {
+      timestamp: timestamp,
+      url: event.request.url,
+      body: body
+    };
+
+    requestStore.setItem(timestamp.toString(), save).then(function(data) {
+      console.log('Saved POST request', data);
+    }).catch(function(error) {
+      console.log('Failed to store request', error);
+    });
+  });
+}
+
+function replayPOSTRequests() {
+  requestStore.iterate(function(storedRequest, key) {
+
+    var request = {
+      method: 'POST',
+      body: JSON.stringify(storedRequest.body),
+      headers: {}
+    };
+    console.log('Replaying', storedRequest.url, request);
+
+    fetch(storedRequest.url, request).then(function(response) {
+      if (response.status < 400) {
+        // If sending the request was successful, then remove it from the IndexedDB.
+        requestStore.removeItem(key);
+        console.log(' Replaying succeeded.');
+      } else {
+        // This will be triggered if, e.g., the server returns a HTTP 50x response.
+        // The request will be replayed the next time the service worker starts up.
+        console.error(' Replaying failed:', response);
+      }
+    }).catch(function(error) {
+      // This will be triggered if the network is still down. The request will be replayed again
+      // the next time the service worker starts up.
+      console.error(' Replaying failed:', error);
+    });
+  });
 }
 
 function returnVideoFromIndexedDB(event) {
   var url = event.request.url;
   var range = event.request.headers.get('range');
 
-  event.respondWith(localforage.getItem(url).then(function(item) {
+  event.respondWith(videoStore.getItem(url).then(function(item) {
     if (item === null) {
       // for some reason we could not retrieve the video from the database, so just add it
       // and delegate the work of getting the video to the external URL.
@@ -173,7 +279,7 @@ function addVideoToIndexedDB(url) {
   fetch(request).then(function(response) {
     return response.blob();
   }).then(function(blob) {
-    localforage.setItem(url, blob, function(item, err) {
+    videoStore.setItem(url, blob, function(item, err) {
       console.log("Finished downloading and storing video." + url, blob);
     });
   }).catch(function(err) {

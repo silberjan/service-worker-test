@@ -8,3 +8,17 @@ if ('serviceWorker' in navigator) {
   });
 }
 
+
+function sendPOST() {
+  var xhttp = new XMLHttpRequest();
+  // xhttp.onreadystatechange = function() {
+  //   if (xhttp.readyState == 4 && xhttp.status == 200) {
+  //     document.getElementById("demo").innerHTML = xhttp.responseText;
+  //   }
+  // };
+  xhttp.open("POST", "http://jsonplaceholder.typicode.com/posts", true);
+  xhttp.setRequestHeader("Content-Type", "application/json");
+  xhttp.send(JSON.stringify({
+    some: 'data'
+  }));
+}
