@@ -1,6 +1,22 @@
-# Video Worker Test
+# Service Worker Test
 
-### Video Stuff
+Sample App that integrates Service Workers to have a offline available page. The [static files](#statics-caching) like `index.html` and its dependencies are cached. This also includes precaching of the embedded [videos](#video-stuff). [POST requests](#replay-post-requests) are stored when they can't be resolved and are replayed as soon as the connection is up again.
+
+- [Statics Caching](#statics-caching)
+- [Video Stuff](#video-stuff)
+- [Replay POST Requests](#replay-post-requests)
+- [Dependencies/Setup](#dependencies)
+- [Usage](#usage)
+
+
+
+## Statics Caching
+
+The important static dependencies are pre-cached and will be returned in a cache-first approach.
+
+
+
+## Video Stuff
 
 #### Random Notes
 - The Service Worker's `fetch` does not currently seem to work with `mp4`-Video in Chrome ([see also](https://bugs.chromium.org/p/chromium/issues/detail?id=546076)). **Solution:** Use current Chrome Canary.
@@ -25,11 +41,29 @@ For every request of a .mp4 video the Service Worker intercepts:
      - The video server would not answer with `206 Partial Content` but with `200 OK` disallowing the user to skip in the player.
      - The whole video would be fetched instead of the parts that were needed, resulting in lots of traffic on initial loads.
 
-### Dependencies
+
+
+## Replay POST Requests
+
+#### Strategy
+
+1. Whenever a POST request made by the application fails (because the server is not reachable or the server returns a status code >= 500) it gets stored in an indexDB instance.
+
+2. When the the Service Worker starts the next time or when an another network requests gets resolved we try to replay the queued requests.
+
+(Coming next)
+3. sync events should trigger the replay of the requests too.
+
+
+
+## Dependencies
+
 - node/npm
 - grunt (```npm install grunt-cli -g```)
+- build dependencies: ```npm install```
 
-### Setup
 
-1. Install everything: ```npm install```
-2. Start the server: ```grunt```
+## Usage
+
+Start the server: ```grunt```
+The page will be served on [http://localhost:1337/](http://localhost:1337/)
