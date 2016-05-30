@@ -1,6 +1,6 @@
 'use strict';
 
-self.importScripts("/js/localforage.js");
+self.importScripts("./js/localforage.js");
 
 var CACHE_VERSION = 'v1';
 // array to store the URLs of all the currently stored videos so we can synchronously
@@ -36,10 +36,10 @@ function installServiceWorker(event) {
 function setupStaticsCache() {
   caches.open(CACHE_VERSION).then(function(cache) {
     return cache.addAll([
-      '/',
-      '/index.html',
-      '/js/main.js',
-      '/js/localforage.js'
+      './',
+      './index.html',
+      './js/main.js',
+      './js/localforage.js'
     ]);
   })
 }
