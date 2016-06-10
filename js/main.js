@@ -6,8 +6,14 @@ if ('serviceWorker' in navigator) {
   }).catch(function(err) {
     console.log(err);
   });
+
 }
 
+function requestOfflineSync() {
+  navigator.serviceWorker.ready.then(function(swRegistration) {
+    return swRegistration.sync.register('myFirstSync');
+  });
+}
 
 function sendPOST() {
   var xhttp = new XMLHttpRequest();

@@ -18,6 +18,9 @@ self.addEventListener('install', installServiceWorker);
 // Service worker fetch event
 self.addEventListener('fetch', handleFetch);
 
+// Service worker sync event
+self.addEventListener('sync', handleSync);
+
 
 ///////////
 // SETUP //
@@ -120,6 +123,26 @@ function handleVideoFetch(event) {
   }
 }
 
+
+//////////
+// SYNC //
+//////////
+
+function handleSync(event) {
+  console.log('handle some sync', event);
+
+  if (event.tag === 'myFirstSync') {
+    console.log('do myFirstSync');
+    event.waitUntil(function() {
+    });
+  } else if (event.tag === 'ReplaySync') {
+    console.log('do ReplaySync');
+    // TODO: pass promise to tell sync if it has to try again
+    event.waitUntil(replayPOSTRequests());
+  }
+}
+
+
 /////////////
 // HELPERS //
 /////////////
@@ -181,6 +204,9 @@ function savePOSTRequest(event) {
 
     requestStore.setItem(timestamp.toString(), save).then(function(data) {
       console.log('Saved POST request', data);
+
+      // request to sync pending requests when connection is back up
+      self.registration.sync.register('ReplaySync');
     }).catch(function(error) {
       console.log('Failed to store request', error);
     });
@@ -188,7 +214,7 @@ function savePOSTRequest(event) {
 }
 
 function replayPOSTRequests() {
-  requestStore.iterate(function(storedRequest, key) {
+  return requestStore.iterate(function(storedRequest, key) {
 
     var request = {
       method: 'POST',
@@ -205,13 +231,17 @@ function replayPOSTRequests() {
       } else {
         // This will be triggered if, e.g., the server returns a HTTP 50x response.
         // The request will be replayed the next time the service worker starts up.
-        console.error(' Replaying failed:', response);
+        throw new Error('Replaying failed with status >= 400');
       }
     }).catch(function(error) {
       // This will be triggered if the network is still down. The request will be replayed again
       // the next time the service worker starts up.
       console.error(' Replaying failed:', error);
+
+      // request to sync pending requests when connection is back up
+      self.registration.sync.register('ReplaySync');
     });
+
   });
 }
 
