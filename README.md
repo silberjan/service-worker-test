@@ -4,6 +4,7 @@ Sample App that integrates Service Workers to have a offline available page. The
 
 - [Statics Caching](#statics-caching)
 - [Video Stuff](#video-stuff)
+- [Quota Management](#quota-management)
 - [Replay POST Requests](#replay-post-requests)
 - [Dependencies/Setup](#dependencies)
 - [Usage](#usage)
@@ -41,7 +42,29 @@ For every request of a .mp4 video the Service Worker intercepts:
      - The video server would not answer with `206 Partial Content` but with `200 OK` disallowing the user to skip in the player.
      - The whole video would be fetched instead of the parts that were needed, resulting in lots of traffic on initial loads.
 
+## Quota Management
+- As of right now, IndexedDB is considered a **temporary** storage:
+  
+  https://developer.chrome.com/apps/offline_storage#table
+  
+  This means that it is not possible to manually request a specific quota, it is fixed (to roughly 1278MB on both my computers).
+  Besides, the browser may delete any data at its own discretion, most likely using a LRU policy.
+  This also means that other data stored in IndexedDB (namely POST requests) might get purged when too many videos get cached.
+- In the next version of IndexedDB, this is expected to change. IndexedDB would then be able to store both temporary and persistent storage according to the developer's wishes.
+  - Note in the Quota Management API draft: https://www.w3.org/TR/quota-api/#quota-handling-in-storage-apis
+  - Chrome future development: https://developer.chrome.com/apps/offline_storage#future
+  - Current IndexedDB API draft: http://w3c.github.io/IndexedDB/
+  
+  Unfortunately, Chrome does not implement that behavior yet as testified by the output of the Quota Management API in our test application.
 
+- **Possible solutions**:
+  - *Stay with IndexedDB* and try to manually handle the quota before the browser steps in.
+    Once IndexedDB gets support for persistent storage it can easily be migrated.
+  - *Move to the persistent File System API* (nice secondary effect: strict separation of video data and POST requests).
+
+  In both cases, eventually using persistent storage would make it necessary for the user to manually allow offline storage, essentially making the offline feature modal.
+  
+  **Question:** How transparent should the offline-feature be? Should the user enable it explicitely or not?
 
 ## Replay POST Requests
 
