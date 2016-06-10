@@ -51,8 +51,7 @@ For every request of a .mp4 video the Service Worker intercepts:
 
 2. When the the Service Worker starts the next time or when an another network requests gets resolved we try to replay the queued requests.
 
-(Coming next)
-3. sync events should trigger the replay of the requests too.
+3. Also Background Sync tries to replay the request as soon as possible. We request the browser to notify us when the connection is up again and then replay the requests. (does only work right if the hardware connection is really offline, chrome network throttle is ignored)
 
 
 
