@@ -3,9 +3,15 @@
 self.importScripts("./js/localforage.js");
 
 var CACHE_VERSION = 'v1';
-// array to store the URLs of all the currently stored videos so we can synchronously
+// array and enum to store the states of all currently stored videos so we can synchronously
 // decide whether to use a fallback response
-var indexedVideos = [];
+var videoStates = [];
+var VideoState = Object.freeze({
+  UNKNOWN: "UNKNOWN",   // video is not known, i.e., not available
+  LOADING: "LOADING",   // video is currently loading
+  AVAILABLE: "AVAILABLE", // video is fully available in IndexedDB
+});
+
 var videoStore;
 var requestStore;
 
@@ -42,7 +48,8 @@ function setupStaticsCache() {
       './',
       './index.html',
       './js/main.js',
-      './js/localforage.js'
+      './js/localforage.js',
+      './js/quotaManagement.js',
     ]);
   })
 }
@@ -58,7 +65,9 @@ function setupVideoCache() {
   });
 
   videoStore.keys().then(function(keys) {
-    indexedVideos = keys;
+    for (var i = 0; i < keys.length; i++) {
+      updateVideoState(keys[i], VideoState.AVAILABLE);
+    }
   });
 }
 
@@ -80,7 +89,6 @@ function handleFetch(event) {
     return handleVideoFetch(event);
   } else {
     return handleStaticsFetch(event);
-
   }
 }
 
@@ -103,24 +111,38 @@ function handleStaticsFetch(event) {
 
 
 function handleVideoFetch(event) {
-  console.log("Video (Range " + event.request.headers.get('range') + ")", event.request);
+  console.log("Video Request (Range " + event.request.headers.get('range') + ")", event.request);
 
   var url = event.request.url;
 
   // check if we already have the video in the localforage
-  if (indexedVideos.indexOf(url) >= 0) {
-    // we seem to have the video already!
-    returnVideoFromIndexedDB(event);
-  } else {
-    // we do not have the video yet, add it
-    addVideoToIndexedDB(url);
-
-    // note: we let the request fall through and do not process the event further so
-    // the browser takes control again and correctly handles Partial Content responses.
-    // Otherwise, a response to the event with, i.e.,
-    //     fetch(event.request);
-    // would trigger a complete second download of the video.
+  switch (getVideoState(url)) {
+    case VideoState.AVAILABLE:
+      // we seem to have the video already!
+      returnVideoFromIndexedDB(event);
+      break;
+      
+    case VideoState.UNKNOWN:
+      // we do not have the video yet, add it
+      addVideoToIndexedDB(url);
+      break;
+    
+    case VideoState.LOADING:
+      // do nothing and let the request fall through
+      // TODO: can we somehow output a partial response here from the already loaded parts of the video?
+      //       c.f. Ajax example here: http://mozilla.github.io/localForage/#data-api-setitem
+    default:
+      break;
   }
+  
+  /*
+    Note: We let the request fall through if the video is not available
+    and do not process the event further so the browser takes control again
+    and correctly handles Partial Content responses.
+    Otherwise, a response to the event with, i.e.,
+         fetch(event.request);
+    would trigger a complete second download of the video.
+  */
 }
 
 
@@ -251,9 +273,11 @@ function returnVideoFromIndexedDB(event) {
 
   event.respondWith(videoStore.getItem(url).then(function(item) {
     if (item === null) {
-      // for some reason we could not retrieve the video from the database, so just add it
-      // and delegate the work of getting the video to the external URL.
+      // for some reason we could not retrieve the video from the database despite the video status
+      // begin AVAILABLE, so just add it again and delegate the work of getting the video to the external URL.
+      updateVideoState(url, VideoState.UNKNOWN);
       addVideoToIndexedDB(url);
+      // TODO: somehow achieve a stream here so that video skipping is possible
       return fetch(event.request);
     }
 
@@ -267,7 +291,7 @@ function returnVideoFromIndexedDB(event) {
     //                  bytes x-y
     //              to indicate that bytes x to y should be returned (y is optional and may
     //              be missing).
-    // TODO replace this with a regexp... bytes X-(Y)?
+    // TODO: replace this with a regexp... bytes X-(Y)?
     var rangeString = range.split('=')[1];
     var ranges = rangeString.split('-', 2).filter(function(x) {
       return x != "";
@@ -298,24 +322,75 @@ function returnVideoFromIndexedDB(event) {
         ]
       }
     );
+  }).catch(function(err) {
+    console.log("Something is wrong with the IndexedDB.", err)
+    // TODO: somehow achieve a stream here so that video skipping is possible
+    return fetch(event.request);
   }));
 }
 
+// initiate the download of the video with the given url if not already underway
 function addVideoToIndexedDB(url) {
-  indexedVideos.push(url);
-
-  // we do not yet have the video, so load it and store it as a blob...
-  var request = new Request(url);
-  fetch(request).then(function(response) {
-    return response.blob();
-  }).then(function(blob) {
-    videoStore.setItem(url, blob, function(item, err) {
-      console.log("Finished downloading and storing video." + url, blob);
-    });
-  }).catch(function(err) {
-    // delete the video from the list again as the download did not succeed
-    indexedVideos.splice(indexedVideos.indexOf(url), 1);
-  });
+  switch (getVideoState(url)) {
+    case VideoState.UNKNOWN:
+      // we do not yet have the video, so load it and store it as a blob...
+      updateVideoState(url, VideoState.LOADING);
+      
+      var request = new Request(url);
+      fetch(request).then(function(response) {
+        // we got the video, now convert it to a blob
+        return response.blob();
+      }).then(function(blob) {
+        // we now have the video as a blob, try to save it to IndexedDB
+        return videoStore.setItem(url, blob);
+      }).then(function(item) {
+        // it worked, we are done!
+        updateVideoState(url, VideoState.AVAILABLE);
+        console.log("Finished downloading and storing video: " + url);
+      }).catch(function(err) {
+        // something went wrong, log that and reset the video status
+        updateVideoState(url, VideoState.UNKNOWN);
+        console.log("Could not download video: " + url, err);
+      });
+  
+    default:
+      // cancel if we already have the video or are currently downloading it
+      break;
+  }
 }
 
+// update the state of the video with the given url
+function updateVideoState(url, state)
+{
+  console.log("Update Video State: "+state+" => "+url);
+  var videoStateObject = getVideoStateObject(url);
+  if (videoStateObject === null) {
+    videoStates.push({
+      url: url,
+      state: state
+    });
+  } else {
+    videoStateObject.state = state;
+  }
+}
 
+// get the state of the video with the given url
+function getVideoState(url) {
+  var videoStateObject = getVideoStateObject(url);
+  if (videoStateObject === null) {
+    return VideoState.UNKNOWN;
+  }
+  return videoStateObject.state;
+}
+
+// get the internal state object of the video with the given url
+// this naively iterates over all videos until it finds the right ones, but this
+// is probably not a huge problem due to the usually small number of videos cached
+function getVideoStateObject(url) {
+  for (var i = 0; i < videoStates.length; i++) {
+    if (videoStates[i].url == url) {
+      return videoStates[i];
+    }
+  }
+  return null;
+}
