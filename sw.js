@@ -309,8 +309,36 @@ function returnVideoFromIndexedDB(event) {
 
     // return the requested part of the video
     // (refer to https://bugs.chromium.org/p/chromium/issues/detail?id=575357#c10)
+    // TODO: do not send everything at once but open a stream https://jakearchibald.com/2016/streams-ftw/ (very experimental)
+    //       https://developers.google.com/web/updates/2016/06/sw-readablestreams?hl=en
+    //
+    var pos = 0;
+    var stream = new ReadableStream({
+      start(controller) {
+        // nothing to do here
+        console.log("START");
+      },
+      pull(controller) {
+        console.log("PULLPRE"+pos+"/"+controller.desiredSize, controller);
+        if (pos >= output.size) {
+          controller.close();
+          return;
+        }
+        console.log("PULLPOST"+pos+"/"+controller.desiredSize);
+        var desiredSize = controller.desiredSize;
+        controller.enqueue(
+          output.slice(pos, pos + desiredSize, 'video/mp4')
+        );
+        pos += desiredSize;
+      },
+      cancel(reason)
+      {
+        console.log("REASON"+reason)
+      }
+    }, { highWaterMark: 512 * 1024, size(chunk) { return chunk.size; }} );
+    
     return new Response(
-      output,
+      stream,
       {
         status: 206,
         statusText: 'Partial Content',
