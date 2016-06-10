@@ -313,6 +313,12 @@ function returnVideoFromIndexedDB(event) {
     //       https://developers.google.com/web/updates/2016/06/sw-readablestreams?hl=en
     //
     var pos = 0;
+    // Other references:
+        // https://streams.spec.whatwg.org/#blqs-class
+        // https://streams.spec.whatwg.org/#queuing-strategy
+        // https://samdutton.github.io/samples/service-worker/prefetch-video/
+        // https://jakearchibald.com/2016/streams-ftw/
+        // http://www.html5rocks.com/en/tutorials/service-worker/introduction/ CLONE RESPONSE STREAMS
     var stream = new ReadableStream({
       start(controller) {
         // nothing to do here
@@ -327,7 +333,7 @@ function returnVideoFromIndexedDB(event) {
         console.log("PULLPOST"+pos+"/"+controller.desiredSize);
         var desiredSize = controller.desiredSize;
         controller.enqueue(
-          output.slice(pos, pos + desiredSize, 'video/mp4')
+          output.slice(pos, Math.min(pos + desiredSize, output.size), 'video/mp4')
         );
         pos += desiredSize;
       },
@@ -335,8 +341,11 @@ function returnVideoFromIndexedDB(event) {
       {
         console.log("REASON"+reason)
       }
-    }, { highWaterMark: 512 * 1024, size(chunk) { return chunk.size; }} );
+    }, { highWaterMark: 512 * 1024 * 1024, size(chunk) { return chunk.size; }} );
     
+    // return the stream as a response
+    // note: to get rid of streams (for browser compatibility reasons),
+    // just return "output" here instead of "stream"
     return new Response(
       stream,
       {
