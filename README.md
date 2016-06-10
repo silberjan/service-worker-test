@@ -3,6 +3,7 @@
 Sample App that integrates Service Workers to have a offline available page. The [static files](#statics-caching) like `index.html` and its dependencies are cached. This also includes precaching of the embedded [videos](#video-stuff). [POST requests](#replay-post-requests) are stored when they can't be resolved and are replayed as soon as the connection is up again.
 
 - [Statics Caching](#statics-caching)
+- [User Interaction](#user-interaction)
 - [Video Stuff](#video-stuff)
 - [Quota Management](#quota-management)
 - [Replay POST Requests](#replay-post-requests)
@@ -15,7 +16,18 @@ Sample App that integrates Service Workers to have a offline available page. The
 
 The important static dependencies are pre-cached and will be returned in a cache-first approach.
 
+## User Interaction
 
+- **Question:** How transparent should the offline-feature be? Should the user enable it explicitely or not? Should the user do anything active to enable/use offline mode?
+  - *If not:*
+    1. How does a user react if a page downloads >1GB of data without asking?
+	1. Persistent storage would not be usable as the user has to accept the requested quota (see [Quota Management](#quota-management)).
+- **Idea for displaying offline status infos** without making the service worker intransparent to the client:
+  - Introduce API endpoints into the Xikolo API to query for the offline availability or sync status of specific items/sections.
+  - Query these endpoints from Ember to display offline status (f.e. by displaying a green bar above the navigation item).
+  - The online server statically returns a negative response to any of these requests (i.e. "No, nothing is available offline").
+  - The service worker intercepts these requests and instead responds with a positive reply according to its current status (e.g. "The section is available offline" or "The quiz result was not yet synced to the server").
+  - Thus, the absence of the service worker does not break the system and no specific code is needed for the frontend to communicate with the service worker.
 
 ## Video Stuff
 
@@ -64,8 +76,6 @@ For every request of a .mp4 video the Service Worker intercepts:
 
   In both cases, eventually using persistent storage would make it necessary for the user to manually allow offline storage, essentially making the offline feature modal.
   
-  **Question:** How transparent should the offline-feature be? Should the user enable it explicitely or not?
-
 ## Replay POST Requests
 
 #### Strategy
