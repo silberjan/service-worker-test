@@ -280,7 +280,7 @@ function returnVideoFromIndexedDB(event) {
       addVideoToIndexedDB(url);
       
       // TODO: somehow achieve a stream here so that video skipping is possible
-      return fetch(event.request);
+      return fetch(new Request(event.request.url));
     }
 
     // remember which blob to output
@@ -330,7 +330,7 @@ function returnVideoFromIndexedDB(event) {
     console.log("Could not retrieve and serve the video! ", err)
     
     // TODO: somehow achieve a stream here so that video skipping is possible
-    return fetch(event.request);
+    return fetch(new Request(event.request.url))
   }));
 }
 
