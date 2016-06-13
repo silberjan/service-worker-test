@@ -34,6 +34,18 @@ The important static dependencies are pre-cached and will be returned in a cache
 #### Random Notes
 - The Service Worker's `fetch` does not currently seem to work with `mp4`-Video in Chrome ([see also](https://bugs.chromium.org/p/chromium/issues/detail?id=546076)). **Solution:** Use current Chrome Canary.
 - In Chrome, you might need to disable the browser cache in the developer tools.
+- Once the `<video>` player starts playing the video from the remote server, a switch to the service worker causes it to crash. See the following log (`chrome://media-internals/`):
+
+                00:00:17 267	error	BufferedDataSource: origin has changed
+                00:00:17 274	error	FFmpegDemuxer: data source error
+                00:00:17 274	pipeline_state	kStopping
+                00:00:17 275	pipeline_error	pipeline: read error
+                00:00:17 275	event	PAUSE
+                00:00:17 284	pipeline_state	kStopped
+                00:00:23 372	event	WEBMEDIAPLAYER_DESTROYED
+  This is a problem when the service worker finishes downloading and storing the video only after the user already began using the page and tries to handle subsequent requests itself. Restricting the service worker in this case seems necessary. The question is: *How?* Otherwise, somehow faking the origin may also be possible.
+  
+  **Possibly found solution:** Setting the `crossorigin` attribute seems to allow just this behavior, see also [this path](https://codereview.chromium.org/1418533005/patch/20001/30001) and [this doc](https://developer.mozilla.org/en-US/docs/Web/HTML/CORS_settings_attributes). Needs to be tested. 
 
 #### Strategy
 An array of all currently saved videos is held persistently so asynchronous existence checks are possible (querying the IndexedDB through _localforage_ is asynchronous).
