@@ -7,8 +7,8 @@ var CACHE_VERSION = 'v1';
 // decide whether to use a fallback response
 var videoStates = [];
 var VideoState = Object.freeze({
-  UNKNOWN: "UNKNOWN",   // video is not known, i.e., not available
-  LOADING: "LOADING",   // video is currently loading
+  UNKNOWN: "UNKNOWN",     // video is not known, i.e., not available
+  LOADING: "LOADING",     // video is currently loading
   AVAILABLE: "AVAILABLE", // video is fully available in IndexedDB
 });
 
@@ -274,9 +274,11 @@ function returnVideoFromIndexedDB(event) {
   event.respondWith(videoStore.getItem(url).then(function(item) {
     if (item === null) {
       // for some reason we could not retrieve the video from the database despite the video status
-      // begin AVAILABLE, so just add it again and delegate the work of getting the video to the external URL.
+      // being AVAILABLE (most likely because the user or browser deleted the video from the IndexedDB),
+      // so just add it again and delegate the work of getting the video to the external URL
       updateVideoState(url, VideoState.UNKNOWN);
       addVideoToIndexedDB(url);
+      
       // TODO: somehow achieve a stream here so that video skipping is possible
       return fetch(event.request);
     }
@@ -323,7 +325,10 @@ function returnVideoFromIndexedDB(event) {
       }
     );
   }).catch(function(err) {
-    console.log("Something is wrong with the IndexedDB.", err)
+    // some exception occured while retrieving and serving the video, e.g. a failure
+    // of IndexedDB or localforage.
+    console.log("Could not retrieve and serve the video! ", err)
+    
     // TODO: somehow achieve a stream here so that video skipping is possible
     return fetch(event.request);
   }));

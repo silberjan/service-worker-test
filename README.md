@@ -48,23 +48,33 @@ The important static dependencies are pre-cached and will be returned in a cache
   **Possibly found solution:** Setting the `crossorigin` attribute seems to allow just this behavior, see also [this path](https://codereview.chromium.org/1418533005/patch/20001/30001) and [this doc](https://developer.mozilla.org/en-US/docs/Web/HTML/CORS_settings_attributes). Needs to be tested. 
 
 #### Strategy
-An array of all currently saved videos is held persistently so asynchronous existence checks are possible (querying the IndexedDB through _localforage_ is asynchronous).
+- The caching state of all videos is stored in the `videoStates` array to be able to synchronously check video availability (querying the IndexedDB itself is always asynchronous). It contains key/value pairs where the key is the video URL and the value is one of the following:
 
-For every request of a .mp4 video the Service Worker intercepts:
+  - `VideoState.UNKNOWN` if the video is not known (i.e. not in the IndexedDB).
+  - `VideoState.LOADING` if the video is currently loading (i.e. it is currently being requested by the service worker).
+  - `VideoState.AVAILABLE` if the video is available (i.e. it should be in the IndexedDB). Note that even though a video has this state the user or browser might have deleted it outside of the scope of the service worker. In this case the video has to be loaded again.
+  
+  The `videoStates` array is initialized once at startup of the service worker. After that, it is refreshed on the fly. It should not be accessed directly but *only* through `getVideoState(url)` and `updateVideoState(url, state)`.
 
-1. Check whether we already stored the video in IndexedDB by looking it up in the array.
+- **For every request** of a .mp4 video the service worker intercepts according to the current video state:
 
-2. If it has **already been stored**:
-   - Get the video from the IndexedDB as a `blob`.
-   - Slice the requested part out of the video according to the request's `range` header.
-   - Send a response with code `206 Partial Content` containing the video data. This allows the user to skip around in the video.
+  1. `AVAILABLE`
+     - Get the video from the IndexedDB as a `blob`.
+     - Slice the requested part out of the video according to the request's `range` header.
+     - Send a response with code `206 Partial Content` containing the video data. This allows the user to skip around in the video.
    
-3. If the video is **not yet stored**:
-   - Send a separate request to the video server and retrieve the video as a `blob`.
-   - Store the video in the IndexedDB via *localforage*.
-   - **The initial intercepted request is not handled any further.** This triggers the browser to handle it itself again. Using the usual method of just calling `event.respondWith(fetch(request))` like with other requests I ran into the following problems:
-     - The video server would not answer with `206 Partial Content` but with `200 OK` disallowing the user to skip in the player.
-     - The whole video would be fetched instead of the parts that were needed, resulting in lots of traffic on initial loads.
+  1. `LOADING`
+     - Let the request fall through so the browser's video player handles it itself.
+
+  1. `UNKNOWN`
+     - Set the video state to `LOADING`.
+     - Let the original request fall through.
+     - Send a separate request to the video server and retrieve the video as a `blob`.
+     - Store the video in the IndexedDB via *localforage* and set the video state to `AVAILABLE`.
+
+- A note on the technique of *letting the request fall through*: This triggers the browser to handle it itself again. Using the usual method of just calling `event.respondWith(fetch(request))` like with other requests I ran into the following problems:
+  - The video server would not answer with `206 Partial Content` but with `200 OK` disallowing the user to skip in the player.
+  - The whole video would be fetched instead of the parts that were needed, resulting in lots of traffic on initial loads.
 
 ## Quota Management
 - As of right now, IndexedDB is considered a **temporary** storage:
