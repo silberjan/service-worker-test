@@ -64,7 +64,7 @@ function setupStaticsCache() {
   caches.open(CACHE_VERSION).then(function(cache) {
     return cache.addAll([
       './',
-      './css/master.css'
+      './css/master.css',
       './index.html',
       './js/main.js',
       './js/localforage.js',
