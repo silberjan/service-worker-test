@@ -1,4 +1,13 @@
-@import url(https://fonts.googleapis.com/css?family=Montserrat:400,700);
+@import url(https://fonts.googleapis.com/css?family=Roboto:400,700);
+
+@mixin transition($transition-property, $transition-time, $method) {
+    -webkit-transition: $transition-property $transition-time $method;
+    -moz-transition: $transition-property $transition-time $method;
+    -ms-transition: $transition-property $transition-time $method;
+    -o-transition: $transition-property $transition-time $method;
+    transition: $transition-property $transition-time $method;
+}
+
 
 html {
   -webkit-box-sizing: border-box;
@@ -13,29 +22,79 @@ html {
 html, body {
   width: 100%;
   height: 100%;
+  background: #eee;
 }
 
 body {
   padding: 0;
   margin: 0;
-  font-family: 'Montserrat', Helvetica, sans-serif;
+  font-family: 'Roboto', Helvetica, sans-serif;
 }
 
 img {
   max-width: 100%;
 }
 
+button {
+  font-size: .9rem;
+  @include transition(all,0.2s,ease);
+  border-radius: 3px;
+  border: 0;
+  color: rgba(255,255,255,0.85);
+  padding: 0.5rem 1rem;
+  margin: .5rem;
+  cursor: pointer;
+  box-shadow: 0 1px 5px 0 rgba(0,0,0,.2),0 2px 2px 0 rgba(0,0,0,.14),0 3px 1px -2px rgba(0,0,0,.12);
+  background: #2196F3; /* Old browsers */
+  &:hover {
+    box-shadow: 0 5px 6px -3px rgba(0,0,0,.2),0 9px 12px 1px rgba(0,0,0,.14),0 3px 16px 2px rgba(0,0,0,.12);
+  }
+}
+
+.toolbar {
+  height: 60px;
+  box-shadow: 0px 1px 5px 0px rgba(0, 0, 0, 0.2), 0px 2px 2px 0px rgba(0, 0, 0, 0.14), 0px 3px 1px -2px rgba(0, 0, 0, 0.12);
+  background: #2196F3; /* Old browsers */
+  .tools {
+    padding: 18px;
+    color: #fff;
+    font-size: 1.4rem;
+  }
+}
 
 .article-wrapper {
+  &.buttons {
+    margin: 1.5rem;
+  }
+  margin: .5rem auto;
+  text-align: center;
   article {
-    margin: 2rem auto;
-    width: 60%;
-    max-width: 300px;
+    text-align: left;
+    @include transition(all,0.2s,ease);
+    .card-header {
+      padding: 1rem;
+      font-weight: 700;
+    }
+    h2 {
+      padding: 0;
+      margin: 0;
+      font-size: 1.2rem;
+    }
+    display: inline-block;
+    vertical-align: top;
+    color: #333;
+    background: #fff;
+    margin: .5rem;
+    width: 300px;
     border-radius: 3px;
     box-shadow: 0px 1px 5px 0px rgba(0, 0, 0, 0.2), 0px 2px 2px 0px rgba(0, 0, 0, 0.14), 0px 3px 1px -2px rgba(0, 0, 0, 0.12);
+
     p {
       padding: 1rem;
       margin: 0;
+    }
+    video {
+      width: 100%;
     }
     header {
       position: relative;

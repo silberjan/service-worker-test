@@ -2,32 +2,75 @@
 <html>
   <head>
     <meta charset="utf-8">
-    <title>Service Workers Are Great</title>
+    <title>Service Worker Demo</title>
+
+    <link rel="stylesheet" type="text/css" href="./css/master.css">
   </head>
+
   <body>
 
-	<video width="320" height="240" controls crossorigin>
-	<source src="https://vjs.zencdn.net/v/oceans.mp4" type="video/mp4">
-	</video>
+  <div class="toolbar">
+    <div class="tools">
+      <span>Service Worker Demo</span>
+    </div>
+  </div>
 
-	<div>Miau! Ich werde nicht gecached!<br />
-	<img src="https://pbs.twimg.com/media/CcOLGxlWEAAwHm5.jpg" width="320" /></div>
+  <div class="article-wrapper buttons">
+
+    <button type="button" onclick="sendPOST()">send POST</button>
+    <button type="button" onclick="requestOfflineSync()">request offline sync</button>
+
+    <button type="button" onclick="alertTemporaryQuota()">check temporary quota</button>
+    <button type="button" onclick="alertPersistentQuota()">check persistent quota</button>
 
 
-	<video width="320" height="240" controls crossorigin>
-	<source src="https://player.vimeo.com/external/98128930.sd.mp4?s=50c12e6160c3d80462e2b66fe768e5aa" type="video/mp4">
-	</video>
+  </div>
 
-  <br/>
-  <button type="button" onclick="sendPOST()">send POST</button>
-  <button type="button" onclick="requestOfflineSync()">request offline sync</button>
-  
-  <!-- Quota Management Stuff -->
-  <br/>
+  <div class="article-wrapper">
+
+    <article>
+
+      <div class="card-header">
+         <span>Video</span>
+      </div>
+
+    	<video controls crossorigin>
+    	<source src="https://vjs.zencdn.net/v/oceans.mp4" type="video/mp4">
+    	</video>
+
+      <p>Wird cecached</p>
+
+    </article>
+
+    <article>
+      <div class="card-header">
+    	   <span>Foto</span>
+      </div>
+    	<img src="https://pbs.twimg.com/media/CcOLGxlWEAAwHm5.jpg" width="320"/>
+
+      <p>Miau! Ich werde nicht gecached!</p>
+
+    </article>
+
+    <article>
+
+      <div class="card-header">
+         <span>Video</span>
+      </div>
+
+    	<video controls crossorigin>
+    	<source src="https://player.vimeo.com/external/98128930.sd.mp4?s=50c12e6160c3d80462e2b66fe768e5aa" type="video/mp4">
+    	</video>
+
+      <p>Wird cecached</p>
+
+    </article>
+
+    </div>
+
+
+
   <script src="./js/quotaManagement.js"></script>
-  <button type="button" onclick="alertTemporaryQuota()">check temporary quota</button>
-  <button type="button" onclick="alertPersistentQuota()">check persistent quota</button>
-
   <script src="./js/main.js"></script>
   </body>
 </html>

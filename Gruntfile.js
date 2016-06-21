@@ -33,7 +33,11 @@ module.exports = function(grunt) {
     grunt.initConfig({
       browserSync: {
           bsFiles: {
-              src : 'css/*.css'
+              src : [
+                'css/*.css',
+                'index.html',
+                'js/**/*.js'
+              ]
           },
           options: {
               watchTask: true,

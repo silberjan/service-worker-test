@@ -1,4 +1,4 @@
-@import url(https://fonts.googleapis.com/css?family=Montserrat:400,700);
+@import url(https://fonts.googleapis.com/css?family=Roboto:400,700);
 html {
   -webkit-box-sizing: border-box;
   -moz-box-sizing: border-box;
@@ -9,45 +9,98 @@ html {
 
 html, body {
   width: 100%;
-  height: 100%; }
+  height: 100%;
+  background: #eee; }
 
 body {
   padding: 0;
   margin: 0;
-  font-family: 'Montserrat', Helvetica, sans-serif; }
+  font-family: 'Roboto', Helvetica, sans-serif; }
 
 img {
   max-width: 100%; }
 
-.article-wrapper article {
-  margin: 2rem auto;
-  width: 60%;
-  max-width: 300px;
+button {
+  font-size: .9rem;
+  -webkit-transition: all 0.2s ease;
+  -moz-transition: all 0.2s ease;
+  -ms-transition: all 0.2s ease;
+  -o-transition: all 0.2s ease;
+  transition: all 0.2s ease;
   border-radius: 3px;
-  box-shadow: 0px 1px 5px 0px rgba(0, 0, 0, 0.2), 0px 2px 2px 0px rgba(0, 0, 0, 0.14), 0px 3px 1px -2px rgba(0, 0, 0, 0.12); }
-  .article-wrapper article p {
-    padding: 1rem;
-    margin: 0; }
-  .article-wrapper article header {
-    position: relative; }
-    .article-wrapper article header img {
-      border-radius: 3px 3px 0 0;
-      width: 100%;
-      display: flex; }
-    .article-wrapper article header .overlay {
-      background: rgba(0, 0, 0, 0.3);
-      position: absolute;
-      bottom: 0;
-      left: 0;
-      right: 0;
-      padding: 20px 30px; }
-      .article-wrapper article header .overlay a {
-        text-decoration: none; }
-      .article-wrapper article header .overlay .title {
-        margin: 0;
-        color: #fff; }
-      .article-wrapper article header .overlay .icon {
-        color: #fff;
-        float: right; }
+  border: 0;
+  color: rgba(255, 255, 255, 0.85);
+  padding: 0.5rem 1rem;
+  margin: .5rem;
+  cursor: pointer;
+  box-shadow: 0 1px 5px 0 rgba(0, 0, 0, 0.2), 0 2px 2px 0 rgba(0, 0, 0, 0.14), 0 3px 1px -2px rgba(0, 0, 0, 0.12);
+  background: #2196F3;
+  /* Old browsers */ }
+  button:hover {
+    box-shadow: 0 5px 6px -3px rgba(0, 0, 0, 0.2), 0 9px 12px 1px rgba(0, 0, 0, 0.14), 0 3px 16px 2px rgba(0, 0, 0, 0.12); }
+
+.toolbar {
+  height: 60px;
+  box-shadow: 0px 1px 5px 0px rgba(0, 0, 0, 0.2), 0px 2px 2px 0px rgba(0, 0, 0, 0.14), 0px 3px 1px -2px rgba(0, 0, 0, 0.12);
+  background: #2196F3;
+  /* Old browsers */ }
+  .toolbar .tools {
+    padding: 18px;
+    color: #fff;
+    font-size: 1.4rem; }
+
+.article-wrapper {
+  margin: .5rem auto;
+  text-align: center; }
+  .article-wrapper.buttons {
+    margin: 1.5rem; }
+  .article-wrapper article {
+    text-align: left;
+    -webkit-transition: all 0.2s ease;
+    -moz-transition: all 0.2s ease;
+    -ms-transition: all 0.2s ease;
+    -o-transition: all 0.2s ease;
+    transition: all 0.2s ease;
+    display: inline-block;
+    vertical-align: top;
+    color: #333;
+    background: #fff;
+    margin: .5rem;
+    width: 300px;
+    border-radius: 3px;
+    box-shadow: 0px 1px 5px 0px rgba(0, 0, 0, 0.2), 0px 2px 2px 0px rgba(0, 0, 0, 0.14), 0px 3px 1px -2px rgba(0, 0, 0, 0.12); }
+    .article-wrapper article .card-header {
+      padding: 1rem;
+      font-weight: 700; }
+    .article-wrapper article h2 {
+      padding: 0;
+      margin: 0;
+      font-size: 1.2rem; }
+    .article-wrapper article p {
+      padding: 1rem;
+      margin: 0; }
+    .article-wrapper article video {
+      width: 100%; }
+    .article-wrapper article header {
+      position: relative; }
+      .article-wrapper article header img {
+        border-radius: 3px 3px 0 0;
+        width: 100%;
+        display: flex; }
+      .article-wrapper article header .overlay {
+        background: rgba(0, 0, 0, 0.3);
+        position: absolute;
+        bottom: 0;
+        left: 0;
+        right: 0;
+        padding: 20px 30px; }
+        .article-wrapper article header .overlay a {
+          text-decoration: none; }
+        .article-wrapper article header .overlay .title {
+          margin: 0;
+          color: #fff; }
+        .article-wrapper article header .overlay .icon {
+          color: #fff;
+          float: right; }
 
 /*# sourceMappingURL=master.css.map */
