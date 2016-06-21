@@ -18,6 +18,9 @@ var requestStore;
 // Service worker install event
 self.addEventListener('install', installServiceWorker);
 
+// Service worker activate event
+self.addEventListener('activate', activateServiceWorker);
+
 // TODO: perform cleanup of caches
 // https://github.com/GoogleChrome/samples/blob/gh-pages/service-worker/offline-analytics/service-worker.js#L121
 
@@ -33,12 +36,27 @@ self.addEventListener('sync', handleSync);
 ///////////
 
 function installServiceWorker(event) {
+
+  console.log("🌕 Installing service worker version " + CACHE_VERSION + " ...");
+
   event.waitUntil(
     Promise.all([
       setupStaticsCache()
     ])
   );
-  console.log('Installed', event);
+  console.log('✅ Installed service worker version ' + CACHE_VERSION);
+}
+
+function activateServiceWorker(event) {
+
+    console.log("🌑 Activating service worker version " + CACHE_VERSION + "...");
+
+    event.waitUntil(
+      handleNewVersion().then(function() {
+        console.log("✔ Activated service worker version " + CACHE_VERSION);
+      })
+    );
+
 }
 
 // open and populate cache
@@ -97,13 +115,13 @@ function handleStaticsFetch(event) {
   event.respondWith(
     caches.match(event.request).then(function(response) {
       if (response) {
-        console.log("Cache Hit", event.request);
+        console.log("★ Cache Hit", event.request);
         return response;
       }
-      console.log("Cache Miss", event.request);
+      console.log("❗ Cache Miss", event.request);
       return handleUncachedRequest(event);
     }).catch(function() {
-      console.log("Fallback", event.request);
+      console.log("➠ Fallback", event.request);
       return new Response('fallback');
     })
   );
@@ -111,7 +129,7 @@ function handleStaticsFetch(event) {
 
 
 function handleVideoFetch(event) {
-  console.log("Video Request (Range " + event.request.headers.get('range') + ")", event.request);
+  console.log("📼 Video Request (Range " + event.request.headers.get('range') + ")", event.request);
 
   var url = event.request.url;
 
@@ -121,12 +139,12 @@ function handleVideoFetch(event) {
       // we seem to have the video already!
       returnVideoFromIndexedDB(event);
       break;
-      
+
     case VideoState.UNKNOWN:
       // we do not have the video yet, add it
       addVideoToIndexedDB(url);
       break;
-    
+
     case VideoState.LOADING:
       // do nothing and let the request fall through
       // TODO: can we somehow output a partial response here from the already loaded parts of the video?
@@ -134,7 +152,7 @@ function handleVideoFetch(event) {
     default:
       break;
   }
-  
+
   /*
     Note: We let the request fall through if the video is not available
     and do not process the event further so the browser takes control again
@@ -164,6 +182,22 @@ function handleSync(event) {
   }
 }
 
+/////////////
+/// UPDATE //
+/////////////
+
+
+
+function handleNewVersion() {
+
+  var promise = new Promise(function(resolve,reject){
+    resolve();
+  });
+
+  return promise;
+
+}
+
 
 /////////////
 // HELPERS //
@@ -171,7 +205,7 @@ function handleSync(event) {
 
 function handleUncachedRequest(event) {
   return fetch(event.request.clone()).then(function(response) {
-    console.log('  Response for %s from network is: %O', event.request.url, response);
+    console.log('🖧 Response for %s from network is: %O', event.request.url, response);
 
     // Optional: add in extra conditions here, e.g. response.type == 'basic' to only cache
     // responses from the same domain. See https://fetch.spec.whatwg.org/#concept-response-type
@@ -278,7 +312,7 @@ function returnVideoFromIndexedDB(event) {
       // so just add it again and delegate the work of getting the video to the external URL
       updateVideoState(url, VideoState.UNKNOWN);
       addVideoToIndexedDB(url);
-      
+
       // TODO: somehow achieve a stream here so that video skipping is possible
       return fetch(new Request(event.request.url));
     }
@@ -327,8 +361,8 @@ function returnVideoFromIndexedDB(event) {
   }).catch(function(err) {
     // some exception occured while retrieving and serving the video, e.g. a failure
     // of IndexedDB or localforage.
-    console.log("Could not retrieve and serve the video! ", err)
-    
+    console.log("📼 Could not retrieve and serve the video! ", err)
+
     // TODO: somehow achieve a stream here so that video skipping is possible
     return fetch(new Request(event.request.url))
   }));
@@ -340,7 +374,7 @@ function addVideoToIndexedDB(url) {
     case VideoState.UNKNOWN:
       // we do not yet have the video, so load it and store it as a blob...
       updateVideoState(url, VideoState.LOADING);
-      
+
       var request = new Request(url);
       fetch(request).then(function(response) {
         // we got the video, now convert it to a blob
@@ -351,13 +385,13 @@ function addVideoToIndexedDB(url) {
       }).then(function(item) {
         // it worked, we are done!
         updateVideoState(url, VideoState.AVAILABLE);
-        console.log("Finished downloading and storing video: " + url);
+        console.log("📼 Finished downloading and storing video: " + url);
       }).catch(function(err) {
         // something went wrong, log that and reset the video status
         updateVideoState(url, VideoState.UNKNOWN);
-        console.log("Could not download video: " + url, err);
+        console.log("📼 Could not download video: " + url, err);
       });
-  
+
     default:
       // cancel if we already have the video or are currently downloading it
       break;
@@ -367,7 +401,7 @@ function addVideoToIndexedDB(url) {
 // update the state of the video with the given url
 function updateVideoState(url, state)
 {
-  console.log("Update Video State: "+state+" => "+url);
+  console.log("📼 Update Video State: "+state+" => "+url);
   var videoStateObject = getVideoStateObject(url);
   if (videoStateObject === null) {
     videoStates.push({
