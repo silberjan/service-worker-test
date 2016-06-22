@@ -367,6 +367,43 @@ function returnVideoFromIndexedDB(event) {
     // TODO: somehow achieve a stream here so that video skipping is possible
     return fetch(new Request(event.request.url))
   }));
+  
+  /*
+    Future Work: Stream Support
+    
+    Instead of returning the whole BLOB "output" above at once, a HTTP byte stream would be 
+    a far nicer solution. This is very experimental, however, and at the time of writing this
+    (2016-06-16) is not supported by Chrome. A very nice article explaining it can be found here:
+      * https://jakearchibald.com/2016/streams-ftw/
+    The basic idea is to open a ReadableStream and return it instead of "output". The media
+    player would then regularly poll this stream and request new video bytes. A barebone
+    implementation looks like this:
+    
+    <code>
+    var stream = new ReadableStream({
+      type: 'bytes',
+      start(controller) {
+        // nothing to do here
+      },
+      pull(controller) {
+        controller.enqueue(
+          // return the next controller.desiredSize bytes of the video as a BLOB
+        );
+      },
+      cancel(reason) {
+        // free the memory, etc
+      }
+    }, { highWaterMark: <maximum bytes to enqueue>, size(chunk) { return chunk.size; }} );
+    
+    return new Response(
+      stream,
+      [...]
+    );
+    </code>
+    
+    The standard for streams (https://streams.spec.whatwg.org/) is unfortunately quite fluid
+    at the moment and the implementation changes very frequently.    
+  */
 }
 
 // initiate the download of the video with the given url if not already underway
@@ -376,6 +413,9 @@ function addVideoToIndexedDB(url) {
       // we do not yet have the video, so load it and store it as a blob...
       updateVideoState(url, VideoState.LOADING);
 
+      //TODO avoid the second request and find a way to directly attach to the stream
+      //     info on cloning response streams: http://www.html5rocks.com/en/tutorials/service-worker/introduction/
+      //     transform streams might also be useful: https://streams.spec.whatwg.org/#ts
       var request = new Request(url);
       fetch(request).then(function(response) {
         // we got the video, now convert it to a blob
