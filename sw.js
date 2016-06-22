@@ -278,17 +278,17 @@ function replayPOSTRequests() {
       body: JSON.stringify(storedRequest.body),
       headers: {}
     };
-    console.log('Replaying', storedRequest.url, request);
+    console.log('↻ Replaying', storedRequest.url, request);
 
     fetch(storedRequest.url, request).then(function(response) {
       if (response.status < 400) {
         // If sending the request was successful, then remove it from the IndexedDB.
         requestStore.removeItem(key);
-        console.log(' Replaying succeeded.');
+        console.log('↻ Replaying succeeded.');
       } else {
         // This will be triggered if, e.g., the server returns a HTTP 50x response.
         // The request will be replayed the next time the service worker starts up.
-        throw new Error('Replaying failed with status >= 400');
+        throw new Error('↻ Replaying failed with status >= 400');
       }
     }).catch(function(error) {
       // This will be triggered if the network is still down. The request will be replayed again
