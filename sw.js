@@ -120,6 +120,7 @@ function handleStaticsFetch(event) {
         return response;
       }
       console.log("❗ Cache Miss", event.request);
+
       return handleUncachedRequest(event);
     }).catch(function() {
       console.log("➠ Fallback", event.request);
@@ -251,11 +252,17 @@ function checkForPOSTRequest(event) {
 
 function savePOSTRequest(event) {
   event.request.json().then(function(body) {
-    // TODO: may have to store auth headers
+
+    var headers = {};
+    for (var pair of event.request.headers.entries()) {
+      headers[pair[0]] = pair[1];
+    }
+
     var timestamp = Date.now();
     var save = {
       timestamp: timestamp,
       url: event.request.url,
+      headers: headers,
       body: body
     };
 
@@ -276,7 +283,7 @@ function replayPOSTRequests() {
     var request = {
       method: 'POST',
       body: JSON.stringify(storedRequest.body),
-      headers: {}
+      headers: storedRequest.headers
     };
     console.log('↻ Replaying', storedRequest.url, request);
 
@@ -367,18 +374,18 @@ function returnVideoFromIndexedDB(event) {
     // TODO: somehow achieve a stream here so that video skipping is possible
     return fetch(new Request(event.request.url))
   }));
-  
+
   /*
     Future Work: Stream Support
-    
-    Instead of returning the whole BLOB "output" above at once, a HTTP byte stream would be 
+
+    Instead of returning the whole BLOB "output" above at once, a HTTP byte stream would be
     a far nicer solution. This is very experimental, however, and at the time of writing this
     (2016-06-16) is not supported by Chrome. A very nice article explaining it can be found here:
       * https://jakearchibald.com/2016/streams-ftw/
     The basic idea is to open a ReadableStream and return it instead of "output". The media
     player would then regularly poll this stream and request new video bytes. A barebone
     implementation looks like this:
-    
+
     <code>
     var stream = new ReadableStream({
       type: 'bytes',
@@ -394,15 +401,15 @@ function returnVideoFromIndexedDB(event) {
         // free the memory, etc
       }
     }, { highWaterMark: <maximum bytes to enqueue>, size(chunk) { return chunk.size; }} );
-    
+
     return new Response(
       stream,
       [...]
     );
     </code>
-    
+
     The standard for streams (https://streams.spec.whatwg.org/) is unfortunately quite fluid
-    at the moment and the implementation changes very frequently.    
+    at the moment and the implementation changes very frequently.
   */
 }
 

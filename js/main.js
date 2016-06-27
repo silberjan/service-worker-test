@@ -24,6 +24,7 @@ function sendPOST() {
   // };
   xhttp.open("POST", "https://jsonplaceholder.herokuapp.com/posts", true);
   xhttp.setRequestHeader("Content-Type", "application/json");
+  xhttp.setRequestHeader("Custom-Header", "lkajsdl123ds1sd");
   xhttp.send(JSON.stringify({
     some: 'data'
   }));
