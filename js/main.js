@@ -29,3 +29,14 @@ function sendPOST() {
     some: 'data'
   }));
 }
+
+function sendGET(bypass) {
+  var xhttp = new XMLHttpRequest();
+  xhttp.open("GET", "https://jsonplaceholder.herokuapp.com/posts", true);
+
+  if (bypass) {
+    xhttp.setRequestHeader("bypass-cache", "true");
+  }
+
+  xhttp.send();
+}

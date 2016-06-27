@@ -3,6 +3,7 @@
 self.importScripts("./js/localforage.js");
 
 var CACHE_VERSION = 'v1';
+var cache;
 // array and enum to store the states of all currently stored videos so we can synchronously
 // decide whether to use a fallback response
 var videoStates = [];
@@ -61,7 +62,8 @@ function activateServiceWorker(event) {
 
 // open and populate cache
 function setupStaticsCache() {
-  caches.open(CACHE_VERSION).then(function(cache) {
+  caches.open(CACHE_VERSION).then(function(theCache) {
+    cache = theCache;
     return cache.addAll([
       './',
       './css/master.css',
@@ -113,20 +115,27 @@ function handleFetch(event) {
 
 // look in the cache and otherwise perform an external request
 function handleStaticsFetch(event) {
-  event.respondWith(
-    caches.match(event.request).then(function(response) {
-      if (response) {
-        console.log("★ Cache Hit", event.request);
-        return response;
-      }
-      console.log("❗ Cache Miss", event.request);
 
-      return handleUncachedRequest(event);
-    }).catch(function() {
-      console.log("➠ Fallback", event.request);
-      return new Response('fallback');
-    })
-  );
+  // Check bypass cache header
+  if (event.request.headers.get('bypass-cache')) {
+    console.log("➠ bypass Cache", event.request);
+    event.respondWith(handleUncachedRequest(event));
+  } else {
+    event.respondWith(
+      caches.match(event.request).then(function(response) {
+        if (response) {
+          console.log("★ Cache Hit", event.request);
+          return response;
+        }
+        console.log("❗ Cache Miss", event.request);
+
+        return handleUncachedRequest(event);
+      }).catch(function() {
+        console.log("➠ Fallback", event.request);
+        return new Response('fallback');
+      })
+    );
+  }
 }
 
 
@@ -221,7 +230,10 @@ function handleUncachedRequest(event) {
       // We need to call .clone() on the response object to save a copy of it to the cache.
       // (https://fetch.spec.whatwg.org/#dom-request-clone)
       // TODO: decide what we want to cache
-      // cache.put(event.request, response.clone());
+      if (event.request.method === 'GET' && event.request.url.indexOf('.jpg') < 0) {
+        console.log("➕ add to cache", event.request.url, response);
+        cache.put(event.request, response.clone());
+      }
 
       // seams to work, so lets check to send our queued requests.
       replayPOSTRequests();
