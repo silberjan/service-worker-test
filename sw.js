@@ -12,6 +12,7 @@ var VideoState = Object.freeze({
   LOADING: "LOADING",     // video is currently loading
   AVAILABLE: "AVAILABLE", // video is fully available in IndexedDB
 });
+var VIDEO_CHUNK_SIZE = 10 * 1024 * 1024 // 10 MB
 
 var videoStore;
 var requestStore;
@@ -87,7 +88,9 @@ function setupVideoCache() {
 
   videoStore.keys().then(function(keys) {
     for (var i = 0; i < keys.length; i++) {
-      updateVideoState(keys[i], VideoState.AVAILABLE);
+      if (keys[i].substring(0,4) == "http") {
+        updateVideoState(keys[i], VideoState.AVAILABLE);
+      }
     }
   });
 }
@@ -325,22 +328,17 @@ function returnVideoFromIndexedDB(event) {
   var url = event.request.url;
   var range = event.request.headers.get('range');
 
-  event.respondWith(videoStore.getItem(url).then(function(item) {
-    if (item === null) {
+  event.respondWith(videoStore.getItem(url).then(function(videoInfo) {
+    if (videoInfo === null) {
       // for some reason we could not retrieve the video from the database despite the video status
       // being AVAILABLE (most likely because the user or browser deleted the video from the IndexedDB),
       // so just add it again and delegate the work of getting the video to the external URL
       updateVideoState(url, VideoState.UNKNOWN);
       addVideoToIndexedDB(url);
 
-      // TODO: somehow achieve a stream here so that video skipping is possible
-      return fetch(new Request(event.request.url));
+      throw "Could not retrieve video status from IndexedDB.";
     }
-
-    // remember which blob to output
-    // this may change if we have ranges in the request
-    var output = item;
-
+    
     // check if we should return a specific range
     // explanation: The request includes a header "range" which specifies the byte range of
     //              the video that should be returned. It is of the format
@@ -356,12 +354,38 @@ function returnVideoFromIndexedDB(event) {
       ranges.push(0);
     }
     if (ranges.length == 1) {
-      ranges.push(output.size);
+      ranges.push(videoInfo.videoSize);
     }
-    if (ranges[0] != 0 || ranges[1] != output.size) {
-      // slice a fitting blob
-      output = output.slice(ranges[0], ranges[1], 'video/mp4');
+    
+    // retrieve the chunks we need from the IndexedDB
+    var chunkFrom = Math.floor(ranges[0] / videoInfo.chunkSize);
+    var chunkTo = Math.floor(ranges[1] / videoInfo.chunkSize);
+    var promises = [ videoInfo, ranges ];
+    for (var i = chunkFrom; i <= chunkTo; i++) {
+      promises.push(videoStore.getItem(i + "_" + url));
     }
+    
+    return Promise.all(promises);
+  }).then(function(data) {
+    var videoInfo = data[0];
+    var ranges = data[1];
+    var chunks = data.slice(2);
+    
+    // check if we successfully got all chunks
+    for (var i = 0; i < chunks.length; i++) {
+      if (chunks[i] === null) {
+        throw "Could not retrieve chunk " + i + ".";
+      }
+    }
+
+    // slice the edge chunks to fit the requested byte range
+    chunks[chunks.length - 1] = chunks[chunks.length - 1].slice(0, 1 + (ranges[1] % videoInfo.chunkSize));
+    if (ranges[0] % videoInfo.chunkSize != 0) {
+      chunks[0] = chunks[0].slice(ranges[0] % videoInfo.chunkSize, chunks[0].size, 'video/mp4');
+    }
+    
+    // concatenate the chunks
+    var output = new Blob(chunks, { type: 'video/mp4' });
 
     // return the requested part of the video
     // (refer to https://bugs.chromium.org/p/chromium/issues/detail?id=575357#c10)
@@ -374,7 +398,7 @@ function returnVideoFromIndexedDB(event) {
           ['Connection', 'keep-alive'],
           ['Content-Type', 'video/mp4'],
           ['Content-Length', output.size],
-          ['Content-Range', 'bytes ' + ranges[0] + '-' + (ranges[1] - 1) + '/' + item.size]
+          ['Content-Range', 'bytes ' + ranges[0] + '-' + (ranges[1] - 1) + '/' + videoInfo.videoSize]
         ]
       }
     );
@@ -440,8 +464,24 @@ function addVideoToIndexedDB(url) {
         // we got the video, now convert it to a blob
         return response.blob();
       }).then(function(blob) {
-        // we now have the video as a blob, try to save it to IndexedDB
-        return videoStore.setItem(url, blob);
+        // split up video into chunks of the size specified by VIDEO_CHUNK_SIZE and store them
+        var chunkCount = Math.ceil(blob.size / VIDEO_CHUNK_SIZE);
+        var videoInfo = {
+          url: url,
+          videoSize: blob.size,
+          chunkSize: VIDEO_CHUNK_SIZE,
+          chunkCount: chunkCount
+        }
+        var promises = [ videoStore.setItem(url, videoInfo) ];
+        for (var i = 0; i < chunkCount; i++) {
+          promises.push(
+            videoStore.setItem(
+              i + "_" + url,
+              blob.slice(i * VIDEO_CHUNK_SIZE, (i+1)*VIDEO_CHUNK_SIZE, 'video/mp4')
+            )
+          );
+        }
+        return Promise.all(promises);
       }).then(function(item) {
         // it worked, we are done!
         updateVideoState(url, VideoState.AVAILABLE);
