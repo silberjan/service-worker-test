@@ -23,15 +23,15 @@ self.addEventListener('install', installServiceWorker);
 // Service worker activate event
 self.addEventListener('activate', activateServiceWorker);
 
-// TODO: perform cleanup of caches
-// https://github.com/GoogleChrome/samples/blob/gh-pages/service-worker/offline-analytics/service-worker.js#L121
-
 // Service worker fetch event
 self.addEventListener('fetch', handleFetch);
 
 // Service worker sync event
 self.addEventListener('sync', handleSync);
 
+// init
+setupVideoCache();
+setupRequestStore();
 
 ///////////
 // SETUP //
@@ -76,9 +76,6 @@ function setupStaticsCache() {
   })
 }
 
-setupVideoCache();
-setupRequestStore();
-
 // gather all URLs of currently stored videos
 function setupVideoCache() {
   videoStore = localforage.createInstance({
@@ -95,6 +92,7 @@ function setupVideoCache() {
   });
 }
 
+// create store for requests
 function setupRequestStore() {
   requestStore = localforage.createInstance({
     name: 'requestStore',
@@ -109,6 +107,31 @@ function setupRequestStore() {
 ///////////
 
 function handleFetch(event) {
+
+  switch (event.request.method) {
+
+    case 'PUT':
+    case 'DELETE':
+    case 'POST':
+      return handleWriteFetch(event);
+      break;
+
+    case 'GET':
+    case 'HEAD':
+    case 'OPTIONS':
+    default:
+      return handleReadFetch(event);
+      break;
+
+  }
+
+}
+
+function handleWriteFetch(event) {
+  event.respondWith(handleWriteFetchRequest(event));
+}
+
+function handleReadFetch(event) {
   if (event.request.url.indexOf('.mp4') >= 0) {
     return handleVideoFetch(event);
   } else {
@@ -116,14 +139,23 @@ function handleFetch(event) {
   }
 }
 
-// look in the cache and otherwise perform an external request
+
+///////////////////
+// READ REQUESTS //
+///////////////////
+
+// Try to fulfill the read request.
 function handleStaticsFetch(event) {
 
-  // Check bypass cache header
   if (event.request.headers.get('bypass-cache')) {
+
+    // bypass cache the cache
     console.log("➠ bypass Cache", event.request);
     event.respondWith(handleUncachedRequest(event));
+
   } else {
+
+    // check the cache
     event.respondWith(
       caches.match(event.request).then(function(response) {
         if (response) {
@@ -133,14 +165,141 @@ function handleStaticsFetch(event) {
         console.log("❗ Cache Miss", event.request);
 
         return handleUncachedRequest(event);
-      }).catch(function() {
-        console.log("➠ Fallback", event.request);
-        return new Response('fallback');
       })
     );
+
   }
 }
 
+// Try to execute a normal read request.
+function handleUncachedRequest(event) {
+  return fetch(event.request.clone()).then(function(response) {
+    console.log('🖧 Response for %s from network is: %O', event.request.url, response);
+
+    if (response.status < 400) {
+
+      // Cache successful responses
+      // TODO: decide what we want to cache
+      if (event.request.method === 'GET' && event.request.url.indexOf('CcOLGxlWEAAwHm5.jpg') < 0) {
+        console.log("➕ add to cache", event.request.url, response);
+        // We need to call .clone() on the response object to save a copy of it to the cache.
+        cache.put(event.request, response.clone());
+      }
+
+      // Seams to work, so lets check to send our queued requests.
+      replayPOSTRequests();
+    }
+
+    // Return the original response object, which will be used to fulfill the resource request.
+    return response;
+  });
+}
+
+
+///////////////////
+// WRITE REQUEST //
+///////////////////
+
+// Try to execute a normal write request.
+function handleWriteFetchRequest(event) {
+
+  // Try to perform the request:
+  return fetch(event.request.clone())
+    .then(function(response) {
+      console.log('🖧 Response for %s from network is: %O', event.request.url, response);
+
+      if (response.status < 400) {
+        // Seams to work, so lets check to send our queued requests.
+        replayPOSTRequests();
+      } else if (response.status >= 500) {
+        // We want to retry it if a HTTP 5xx response was returned,
+        // just like we'd retry it if the network was down.
+        saveWriteRequest(event);
+      }
+
+      // Return the original response object, which will be used to fulfill the resource request.
+      return response;
+    }).catch(function(error) {
+      // The catch() will be triggered for network failures. Let's see if it was a request we
+      // are looking for, and save it to be retried if it was.
+      saveWriteRequest(event);
+
+      throw error;
+    });
+
+}
+
+// Save the failed request so it can be replayed later.
+function saveWriteRequest(event) {
+  return event.request.json().then(function(body) {
+
+    var headers = {};
+    for (var pair of event.request.headers.entries()) {
+      headers[pair[0]] = pair[1];
+    }
+
+    var timestamp = Date.now();
+    var save = {
+      timestamp: timestamp,
+      url: event.request.url,
+      method: event.request.method,
+      headers: headers,
+      body: body
+    };
+
+    requestStore.setItem(timestamp.toString(), save)
+      .then(function(data) {
+        console.log('Saved write request', data);
+
+        // request to sync pending requests when connection is back up
+        self.registration.sync.register('ReplaySync');
+      })
+      .catch(function(error) {
+        console.log('Failed to store write request', error);
+      });
+  });
+}
+
+// Replay the stored requests.
+function replayPOSTRequests() {
+  return requestStore.iterate(function(storedRequest, key) {
+
+    var request = {
+      method: storedRequest.method,
+      body: JSON.stringify(storedRequest.body),
+      headers: storedRequest.headers
+    };
+    console.log('↻ Replaying', storedRequest.url, request);
+
+    fetch(storedRequest.url, request)
+      .then(function(response) {
+        if (response.status < 500) {
+          // If sending the request and the handling by the server was successful, then remove it from the IndexedDB.
+          requestStore.removeItem(key);
+          console.log('↻ Replaying succeeded.');
+        } else {
+          // This will be triggered if, e.g., the server returns a HTTP 50x response.
+          // The request will be replayed the next time the service worker starts up.
+          throw new Error('↻ Replaying failed with status', response.status);
+        }
+      })
+      .catch(function(error) {
+        // This will be triggered if the network is still down. The request will be replayed again
+        // the next time the service worker starts up.
+        console.log(' Replaying failed:', error);
+
+        // request to sync pending requests when connection is back up
+        // TODO: sync implementation is unstable, we don't call it here again to avoid endless cycles
+        // self.registration.sync.register('ReplaySync');
+      });
+
+  });
+}
+
+
+///////////////////
+// VIDEO REQUEST //
+///////////////////
 
 function handleVideoFetch(event) {
   console.log("📼 Video Request (Range " + event.request.headers.get('range') + ")", event.request);
@@ -160,168 +319,21 @@ function handleVideoFetch(event) {
       break;
 
     case VideoState.LOADING:
-      // do nothing and let the request fall through
-      // TODO: can we somehow output a partial response here from the already loaded parts of the video?
-      //       c.f. Ajax example here: http://mozilla.github.io/localForage/#data-api-setitem
+    // do nothing and let the request fall through
+    // TODO: can we somehow output a partial response here from the already loaded parts of the video?
+    //       c.f. Ajax example here: http://mozilla.github.io/localForage/#data-api-setitem
     default:
       break;
   }
 
   /*
-    Note: We let the request fall through if the video is not available
-    and do not process the event further so the browser takes control again
-    and correctly handles Partial Content responses.
-    Otherwise, a response to the event with, i.e.,
-         fetch(event.request);
-    would trigger a complete second download of the video.
-  */
-}
-
-
-//////////
-// SYNC //
-//////////
-
-function handleSync(event) {
-  console.log('handle some sync', event);
-
-  if (event.tag === 'myFirstSync') {
-    console.log('do myFirstSync');
-    event.waitUntil(function() {
-    });
-  } else if (event.tag === 'ReplaySync') {
-    console.log('do ReplaySync');
-    // TODO: pass promise to tell sync if it has to try again
-    event.waitUntil(replayPOSTRequests());
-  }
-}
-
-/////////////
-/// UPDATE //
-/////////////
-
-
-
-function handleNewVersion() {
-
-  var promise = new Promise(function(resolve,reject){
-    resolve();
-  });
-
-  return promise;
-
-}
-
-
-/////////////
-// HELPERS //
-/////////////
-
-function handleUncachedRequest(event) {
-  return fetch(event.request.clone()).then(function(response) {
-    console.log('🖧 Response for %s from network is: %O', event.request.url, response);
-
-    // Optional: add in extra conditions here, e.g. response.type == 'basic' to only cache
-    // responses from the same domain. See https://fetch.spec.whatwg.org/#concept-response-type
-    if (response.status < 400) {
-      // This avoids caching responses that we know are errors (i.e. HTTP status code of 4xx or 5xx).
-      // One limitation is that, for non-CORS requests, we get back a filtered opaque response
-      // (https://fetch.spec.whatwg.org/#concept-filtered-response-opaque) which will always have a
-      // .status of 0, regardless of whether the underlying HTTP call was successful. Since we're
-      // blindly caching those opaque responses, we run the risk of caching a transient error response.
-      //
-      // We need to call .clone() on the response object to save a copy of it to the cache.
-      // (https://fetch.spec.whatwg.org/#dom-request-clone)
-      // TODO: decide what we want to cache
-      if (event.request.method === 'GET' && event.request.url.indexOf('.jpg') < 0) {
-        console.log("➕ add to cache", event.request.url, response);
-        cache.put(event.request, response.clone());
-      }
-
-      // seams to work, so lets check to send our queued requests.
-      replayPOSTRequests();
-    } else if (response.status >= 500) {
-      // If this is a POST request we want to retry it if a HTTP 5xx response
-      // was returned, just like we'd retry it if the network was down.
-      checkForPOSTRequest(event);
-    }
-
-    // Return the original response object, which will be used to fulfill the resource request.
-    return response;
-  }).catch(function(error) {
-    // The catch() will be triggered for network failures. Let's see if it was a request we
-    // are looking for, and save it to be retried if it was.
-    checkForPOSTRequest(event);
-
-    // TODO: decide if we want to return a custom response
-    throw error;
-  });
-}
-
-function checkForPOSTRequest(event) {
-  if (event.request.method === 'POST') {
-    savePOSTRequest(event);
-  }
-  // TODO have to handle OPTIONS requests?
-}
-
-function savePOSTRequest(event) {
-  event.request.json().then(function(body) {
-
-    var headers = {};
-    for (var pair of event.request.headers.entries()) {
-      headers[pair[0]] = pair[1];
-    }
-
-    var timestamp = Date.now();
-    var save = {
-      timestamp: timestamp,
-      url: event.request.url,
-      headers: headers,
-      body: body
-    };
-
-    requestStore.setItem(timestamp.toString(), save).then(function(data) {
-      console.log('Saved POST request', data);
-
-      // request to sync pending requests when connection is back up
-      self.registration.sync.register('ReplaySync');
-    }).catch(function(error) {
-      console.log('Failed to store request', error);
-    });
-  });
-}
-
-function replayPOSTRequests() {
-  return requestStore.iterate(function(storedRequest, key) {
-
-    var request = {
-      method: 'POST',
-      body: JSON.stringify(storedRequest.body),
-      headers: storedRequest.headers
-    };
-    console.log('↻ Replaying', storedRequest.url, request);
-
-    fetch(storedRequest.url, request).then(function(response) {
-      if (response.status < 400) {
-        // If sending the request was successful, then remove it from the IndexedDB.
-        requestStore.removeItem(key);
-        console.log('↻ Replaying succeeded.');
-      } else {
-        // This will be triggered if, e.g., the server returns a HTTP 50x response.
-        // The request will be replayed the next time the service worker starts up.
-        throw new Error('↻ Replaying failed with status >= 400');
-      }
-    }).catch(function(error) {
-      // This will be triggered if the network is still down. The request will be replayed again
-      // the next time the service worker starts up.
-      console.error(' Replaying failed:', error);
-
-      // request to sync pending requests when connection is back up
-      self.registration.sync.register('ReplaySync');
-    });
-
-  });
+   Note: We let the request fall through if the video is not available
+   and do not process the event further so the browser takes control again
+   and correctly handles Partial Content responses.
+   Otherwise, a response to the event with, i.e.,
+   fetch(event.request);
+   would trigger a complete second download of the video.
+   */
 }
 
 function returnVideoFromIndexedDB(event) {
@@ -338,7 +350,7 @@ function returnVideoFromIndexedDB(event) {
 
       throw "Could not retrieve video status from IndexedDB.";
     }
-    
+
     // check if we should return a specific range
     // explanation: The request includes a header "range" which specifies the byte range of
     //              the video that should be returned. It is of the format
@@ -356,7 +368,7 @@ function returnVideoFromIndexedDB(event) {
     if (ranges.length == 1) {
       ranges.push(videoInfo.videoSize);
     }
-    
+
     // retrieve the chunks we need from the IndexedDB
     var chunkFrom = Math.floor(ranges[0] / videoInfo.chunkSize);
     var chunkTo = Math.floor(ranges[1] / videoInfo.chunkSize);
@@ -364,13 +376,13 @@ function returnVideoFromIndexedDB(event) {
     for (var i = chunkFrom; i <= chunkTo; i++) {
       promises.push(videoStore.getItem(i + "_" + url));
     }
-    
+
     return Promise.all(promises);
   }).then(function(data) {
     var videoInfo = data[0];
     var ranges = data[1];
     var chunks = data.slice(2);
-    
+
     // check if we successfully got all chunks
     for (var i = 0; i < chunks.length; i++) {
       if (chunks[i] === null) {
@@ -383,7 +395,7 @@ function returnVideoFromIndexedDB(event) {
     if (ranges[0] % videoInfo.chunkSize != 0) {
       chunks[0] = chunks[0].slice(ranges[0] % videoInfo.chunkSize, chunks[0].size, 'video/mp4');
     }
-    
+
     // concatenate the chunks
     var output = new Blob(chunks, { type: 'video/mp4' });
 
@@ -499,8 +511,7 @@ function addVideoToIndexedDB(url) {
 }
 
 // update the state of the video with the given url
-function updateVideoState(url, state)
-{
+function updateVideoState(url, state) {
   console.log("📼 Update Video State: "+state+" => "+url);
   var videoStateObject = getVideoStateObject(url);
   if (videoStateObject === null) {
@@ -532,4 +543,49 @@ function getVideoStateObject(url) {
     }
   }
   return null;
+}
+
+
+//////////
+// SYNC //
+//////////
+
+function handleSync(event) {
+
+  switch (event.tag) {
+
+    // sync event to replay POST requests
+    case 'ReplaySync':
+      console.log('do ReplaySync');
+      // TODO: pass promise to tell sync if it has to try again
+      event.waitUntil(replayPOSTRequests());
+      break;
+
+    // test sync requested by the user
+    case 'myFirstSync':
+      console.log('do myFirstSync');
+      event.waitUntil(function() {
+      });
+      break;
+
+  }
+}
+
+
+/////////////
+/// UPDATE //
+/////////////
+
+function handleNewVersion() {
+
+  var promise = new Promise(function(resolve, reject) {
+
+    // TODO: perform cleanup of caches
+    // https://github.com/GoogleChrome/samples/blob/gh-pages/service-worker/offline-analytics/service-worker.js#L121
+
+    resolve();
+  });
+
+  return promise;
+
 }
