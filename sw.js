@@ -2,6 +2,7 @@
 
 self.importScripts("./js/localforage.js");
 
+var DEBUG = 'info';
 var CACHE_VERSION = 'v1';
 var cache;
 // array and enum to store the states of all currently stored videos so we can synchronously
@@ -16,6 +17,14 @@ var VIDEO_CHUNK_SIZE = 10 * 1024 * 1024 // 10 MB
 
 var videoStore;
 var requestStore;
+
+if (DEBUG == 'info') {
+  console.log = function() {};
+}
+if (DEBUG == 'error') {
+  console.log = function() {};
+  console.info = function() {};
+}
 
 // Service worker install event
 self.addEventListener('install', installServiceWorker);
@@ -46,7 +55,7 @@ function installServiceWorker(event) {
       setupStaticsCache()
     ])
   );
-  console.log('✅ Installed service worker version ' + CACHE_VERSION);
+  console.info('✅ Installed service worker version ' + CACHE_VERSION);
 }
 
 function activateServiceWorker(event) {
@@ -55,7 +64,7 @@ function activateServiceWorker(event) {
 
     event.waitUntil(
       handleNewVersion().then(function() {
-        console.log("✔ Activated service worker version " + CACHE_VERSION);
+        console.info("✔ Activated service worker version " + CACHE_VERSION);
       })
     );
 
@@ -150,7 +159,7 @@ function handleStaticsFetch(event) {
   if (event.request.headers.get('bypass-cache')) {
 
     // bypass cache the cache
-    console.log("➠ bypass Cache", event.request);
+    console.info("➠ bypass Cache", event.request.url);
     event.respondWith(handleUncachedRequest(event));
 
   } else {
@@ -159,10 +168,10 @@ function handleStaticsFetch(event) {
     event.respondWith(
       caches.match(event.request).then(function(response) {
         if (response) {
-          console.log("★ Cache Hit", event.request);
+          console.log("★ Cache Hit", event.request.url);
           return response;
         }
-        console.log("❗ Cache Miss", event.request);
+        console.log("❗ Cache Miss", event.request.url);
 
         return handleUncachedRequest(event);
       })
@@ -249,13 +258,13 @@ function saveWriteRequest(event) {
 
     requestStore.setItem(timestamp.toString(), save)
       .then(function(data) {
-        console.log('Saved write request', data);
+        console.info('Saved write request', data);
 
         // request to sync pending requests when connection is back up
         self.registration.sync.register('ReplaySync');
       })
       .catch(function(error) {
-        console.log('Failed to store write request', error);
+        console.error('Failed to store write request', error);
       });
   });
 }
@@ -276,7 +285,7 @@ function replayPOSTRequests() {
         if (response.status < 500) {
           // If sending the request and the handling by the server was successful, then remove it from the IndexedDB.
           requestStore.removeItem(key);
-          console.log('↻ Replaying succeeded.');
+          console.info('↻ Replaying succeeded', response);
         } else {
           // This will be triggered if, e.g., the server returns a HTTP 50x response.
           // The request will be replayed the next time the service worker starts up.
@@ -286,7 +295,7 @@ function replayPOSTRequests() {
       .catch(function(error) {
         // This will be triggered if the network is still down. The request will be replayed again
         // the next time the service worker starts up.
-        console.log(' Replaying failed:', error);
+        console.error(' Replaying failed:', error);
 
         // request to sync pending requests when connection is back up
         // TODO: sync implementation is unstable, we don't call it here again to avoid endless cycles
@@ -497,11 +506,11 @@ function addVideoToIndexedDB(url) {
       }).then(function(item) {
         // it worked, we are done!
         updateVideoState(url, VideoState.AVAILABLE);
-        console.log("📼 Finished downloading and storing video: " + url);
+        console.info("📼 Finished downloading and storing video: " + url);
       }).catch(function(err) {
         // something went wrong, log that and reset the video status
         updateVideoState(url, VideoState.UNKNOWN);
-        console.log("📼 Could not download video: " + url, err);
+        console.error("📼 Could not download video: " + url, err);
       });
 
     default:
