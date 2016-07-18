@@ -2,8 +2,35 @@
 
 self.importScripts("./js/localforage.js");
 
-var DEBUG = 'info';
-var CACHE_VERSION = 'v1';
+//// CONFIGURATION > START
+const successHandlers = [
+  {
+    method: 'GET',
+    pattern: /^((?!CcOLGxlWEAAwHm5).)*$/, // everything else than the image
+    cache: true
+  },
+  {
+    method: 'GET',
+    pattern: /((?:posts))$/, // only post request
+    bodyHandler: function(body) {
+      var request = new Request('https://jsonplaceholder.herokuapp.com/comments');
+      handleStaticsFetch(request);
+    }
+  }
+];
+const preCacheResources = [
+  './',
+  './css/master.css',
+  './index.html',
+  './js/main.js',
+  './js/localforage.js',
+  './js/quotaManagement.js'
+];
+const DEBUG = 'log';
+const CACHE_VERSION = 'v1';
+//// CONFIGURATION > END
+
+
 var cache;
 // array and enum to store the states of all currently stored videos so we can synchronously
 // decide whether to use a fallback response
@@ -11,9 +38,9 @@ var videoStates = [];
 var VideoState = Object.freeze({
   UNKNOWN: "UNKNOWN",     // video is not known, i.e., not available
   LOADING: "LOADING",     // video is currently loading
-  AVAILABLE: "AVAILABLE", // video is fully available in IndexedDB
+  AVAILABLE: "AVAILABLE" // video is fully available in IndexedDB
 });
-var VIDEO_CHUNK_SIZE = 10 * 1024 * 1024 // 10 MB
+var VIDEO_CHUNK_SIZE = 10 * 1024 * 1024; // 10 MB
 
 var videoStore;
 var requestStore;
@@ -41,6 +68,7 @@ self.addEventListener('sync', handleSync);
 // init
 setupVideoCache();
 setupRequestStore();
+
 
 ///////////
 // SETUP //
@@ -74,15 +102,8 @@ function activateServiceWorker(event) {
 function setupStaticsCache() {
   caches.open(CACHE_VERSION).then(function(theCache) {
     cache = theCache;
-    return cache.addAll([
-      './',
-      './css/master.css',
-      './index.html',
-      './js/main.js',
-      './js/localforage.js',
-      './js/quotaManagement.js',
-    ]);
-  })
+    return cache.addAll(preCacheResources);
+  });
 }
 
 // gather all URLs of currently stored videos
@@ -110,6 +131,7 @@ function setupRequestStore() {
 
   replayPOSTRequests();
 }
+
 
 ///////////
 // FETCH //
@@ -144,7 +166,7 @@ function handleReadFetch(event) {
   if (event.request.url.indexOf('.mp4') >= 0) {
     return handleVideoFetch(event);
   } else {
-    return handleStaticsFetch(event);
+    return event.respondWith(handleStaticsFetch(event.request));
   }
 }
 
@@ -154,46 +176,39 @@ function handleReadFetch(event) {
 ///////////////////
 
 // Try to fulfill the read request.
-function handleStaticsFetch(event) {
+function handleStaticsFetch(request) {
 
-  if (event.request.headers.get('bypass-cache')) {
+  if (request.headers.get('bypass-cache')) {
 
     // bypass cache the cache
-    console.info("➠ bypass Cache", event.request.url);
-    event.respondWith(handleUncachedRequest(event));
+    console.info("➠ bypass Cache", request.url);
+    return handleUncachedRequest(request);
 
   } else {
 
     // check the cache
-    event.respondWith(
-      caches.match(event.request).then(function(response) {
-        if (response) {
-          console.log("★ Cache Hit", event.request.url);
-          return response;
-        }
-        console.log("❗ Cache Miss", event.request.url);
+    return caches.match(request).then(function(response) {
+      if (response) {
+        console.log("★ Cache Hit", request.url);
+        return response;
+      }
+      console.log("❗ Cache Miss", request.url);
 
-        return handleUncachedRequest(event);
-      })
-    );
+      return handleUncachedRequest(request);
+    });
 
   }
 }
 
 // Try to execute a normal read request.
-function handleUncachedRequest(event) {
-  return fetch(event.request.clone()).then(function(response) {
-    console.log('🖧 Response for %s from network is: %O', event.request.url, response);
+function handleUncachedRequest(request) {
+  return fetch(request.clone()).then(function(response) {
+    console.log('🖧 Response for %s from network is: %O', request.url, response);
 
     if (response.status < 400) {
 
-      // Cache successful responses
-      // TODO: decide what we want to cache
-      if (event.request.method === 'GET' && event.request.url.indexOf('CcOLGxlWEAAwHm5.jpg') < 0) {
-        console.log("➕ add to cache", event.request.url, response);
-        // We need to call .clone() on the response object to save a copy of it to the cache.
-        cache.put(event.request, response.clone());
-      }
+      // What else to do with the response?
+      handleNewSuccessfulResponse(request, response);
 
       // Seams to work, so lets check to send our queued requests.
       replayPOSTRequests();
@@ -202,6 +217,26 @@ function handleUncachedRequest(event) {
     // Return the original response object, which will be used to fulfill the resource request.
     return response;
   });
+}
+
+// Use Response to perform additional actions.
+function handleNewSuccessfulResponse(request, response) {
+
+  // apply all handlers
+  for (var handler of successHandlers) {
+    if (request.method === handler.method && handler.pattern.exec(request.url) != null) {
+      if (handler.cache) {
+        cache.put(request, response.clone());
+      }
+      if (handler.bodyHandler) {
+        const myHandler = handler;
+        response.clone().json().then(function(body) {
+          myHandler.bodyHandler(body);
+        });
+      }
+    }
+  }
+
 }
 
 
