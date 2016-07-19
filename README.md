@@ -4,7 +4,7 @@ Sample App that integrates Service Workers to have a offline available page. The
 
 - [Statics Caching](#statics-caching)
 - [User Interaction](#user-interaction)
-- [Video Stuff](#video-stuff)
+- [Video Serving](#video-serving)
 - [Quota Management](#quota-management)
 - [Replay POST Requests](#replay-post-requests)
 - [Dependencies/Setup](#dependencies)
@@ -29,7 +29,7 @@ The important static dependencies are pre-cached and will be returned in a cache
   - The service worker intercepts these requests and instead responds with a positive reply according to its current status (e.g. "The section is available offline" or "The quiz result was not yet synced to the server").
   - Thus, the absence of the service worker does not break the system and no specific code is needed for the frontend to communicate with the service worker.
 
-## Video Stuff
+## Video Serving
 
 #### Random Notes
 - The Service Worker's `fetch` does not currently seem to work with `mp4`-Video in Chrome ([see also](https://bugs.chromium.org/p/chromium/issues/detail?id=546076)). **Solution:** Use current Chrome Canary.
@@ -45,7 +45,20 @@ The important static dependencies are pre-cached and will be returned in a cache
                 00:00:23 372	event	WEBMEDIAPLAYER_DESTROYED
   This is a problem when the service worker finishes downloading and storing the video only after the user already began using the page and tries to handle subsequent requests itself. Restricting the service worker in this case seems necessary. The question is: *How?* Otherwise, somehow faking the origin may also be possible.
   
-  **Possibly found solution:** Setting the `crossorigin` attribute seems to allow just this behavior, see also [this path](https://codereview.chromium.org/1418533005/patch/20001/30001) and [this doc](https://developer.mozilla.org/en-US/docs/Web/HTML/CORS_settings_attributes). Needs to be tested. 
+  **Possibly found solution:** Setting the `crossorigin` attribute seems to allow just this behavior, see also [this path](https://codereview.chromium.org/1418533005/patch/20001/30001) and [this doc](https://developer.mozilla.org/en-US/docs/Web/HTML/CORS_settings_attributes). Needs to be tested.
+- Vimeo video requests are redirected to one of Vimeo's CDN servers. Examples:
+
+                   https://player.vimeo.com/external/98128930.sd.mp4?s=50c12e6160c3d80462e2b66fe768e5aa
+                -> https://fpdl.vimeocdn.com/vimeo-prod-skyfire-std-us/01/4625/3/98128930/262232585.mp4?
+                           token=57858cc4_0xc6daf2197c29a7dd8ae2fad000afbcbc5eba5d96
+                    
+                   https://player.vimeo.com/external/93238287.sd.mp4?s=8aa8ca257eb64f31ec7bbb01e89e2341
+                -> https://16-lvl3-pdl.vimeocdn.com/01/3647/3/93238287/248378528.mp4?
+                           expires=1468367367&token=03765030c0d85fe8b8377 
+  For the first redirect to `fpdl.vimeocdn.com` this is no problem, `fetch()` is able to request it. The second CDN server, however, rejects the same call with the following message:
+  > Fetch API cannot load https://16-lvl3-pdl.vimeocdn.com/[...]. No 'Access-Control-Allow-Origin' header is present on the requested resource. Origin 'null' is therefore not allowed access. If an opaque response serves your needs, set the request's mode to 'no-cors' to fetch the resource with CORS disabled.
+  
+  A no-cors request is not enough for our purpose, however, as we want to have access to the video data. This seems to be a problem with the Vimeo server configuration outside of our control.
 
 #### Strategy
 - The caching state of all videos is stored in the `videoStates` array to be able to synchronously check video availability (querying the IndexedDB itself is always asynchronous). It contains key/value pairs where the key is the video URL and the value is one of the following:
