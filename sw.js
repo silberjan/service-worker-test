@@ -65,6 +65,7 @@ self.addEventListener('fetch', handleFetch);
 // Service worker sync event
 self.addEventListener('sync', handleSync);
 
+// Communicate with service worker
 self.addEventListener('message', handleMessage);
 
 
@@ -91,13 +92,13 @@ function installServiceWorker(event) {
 
 function activateServiceWorker(event) {
 
-    console.log("🌑 Activating service worker version " + CACHE_VERSION + "...");
+  console.log("🌑 Activating service worker version " + CACHE_VERSION + "...");
 
-    event.waitUntil(
-      handleNewVersion().then(function() {
-        console.info("✔ Activated service worker version " + CACHE_VERSION);
-      })
-    );
+  event.waitUntil(
+    handleNewVersion().then(function() {
+      console.info("✔ Activated service worker version " + CACHE_VERSION);
+    })
+  );
 
 }
 
@@ -230,6 +231,10 @@ function handleNewSuccessfulResponse(request, response) {
     if (request.method === handler.method && handler.pattern.exec(request.url) != null) {
       if (handler.cache) {
         cache.put(request, response.clone());
+        broadcastMessage({
+          type: 'addToCache',
+          data: request.url
+        })
       }
       if (handler.bodyHandler) {
         const myHandler = handler;
@@ -647,12 +652,26 @@ function handleMessage(event) {
         });
       });
 
+    // For more commands like 'add', 'delete' refer to:
+    // https://github.com/GoogleChrome/samples/blob/gh-pages/service-worker/post-message/service-worker.js#L103
+
     default:
       // This will be handled by the outer .catch().
       throw Error('Unknown command: ' + event.data.command);
   }
 
 }
+
+function broadcastMessage(message) {
+  // Send a message to each of the controlled pages.
+  // This will trigger navigator.serviceWorker.onmessage in each client.
+  return self.clients.matchAll().then(function(clients) {
+    return Promise.all(clients.map(function(client) {
+      return client.postMessage(message);
+    }));
+  });
+}
+
 
 /////////////
 /// UPDATE //

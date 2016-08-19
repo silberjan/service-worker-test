@@ -18,6 +18,10 @@ The important static dependencies are pre-cached and will be returned in a cache
 
 ## User Interaction
 
+- **Direct Communication with Service Worker:**
+  - The client can send messages to the service worker using `navigator.serviceWorker.controller.postMessage` and can wait for an answer. In the demo the command `keys` returns a list of all cached resources.
+  - The client can also listen to all messages the service worker sends: `navigator.serviceWorker.onmessage`
+  - In the demo the service worker broadcasts a message to all clients whenever an item is added to the cache: client.postMessage(message)`
 - **Question:** How transparent should the offline-feature be? Should the user enable it explicitely or not? Should the user do anything active to enable/use offline mode?
   - *If not:*
     1. How does a user react if a page downloads >1GB of data without asking?

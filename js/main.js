@@ -1,7 +1,19 @@
 'use strict';
 
 if ('serviceWorker' in navigator) {
-  navigator.serviceWorker.register('sw.js').then(function(reg) { // sw.js muss in app root
+
+  // Set up a callback for messages posted from the service worker.
+  navigator.serviceWorker.onmessage = function(event) {
+    console.log('onMessage', event.data);
+  };
+
+  // Set up a listener for messages posted from the service worker.
+  navigator.serviceWorker.addEventListener('message', function(event) {
+    console.log('eventMessage', event.data);
+  });
+
+  // sw.js muss in app root
+  navigator.serviceWorker.register('sw.js').then(function(reg) {
     //console.log(reg);
   }).catch(function(err) {
     console.log(err);
