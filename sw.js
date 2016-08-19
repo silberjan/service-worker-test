@@ -65,6 +65,9 @@ self.addEventListener('fetch', handleFetch);
 // Service worker sync event
 self.addEventListener('sync', handleSync);
 
+self.addEventListener('message', handleMessage);
+
+
 // init
 setupVideoCache();
 setupRequestStore();
@@ -615,6 +618,41 @@ function handleSync(event) {
   }
 }
 
+
+/////////////
+// MESSAGE //
+/////////////
+
+function handleMessage(event) {
+  console.log('Handling message event:', event);
+
+  switch (event.data.command) {
+    // This command returns a list of the URLs corresponding to the Request objects
+    // that serve as keys for the current cache.
+    case 'keys':
+      return cache.keys().then(function(requests) {
+        var urls = requests.map(function(request) {
+          return request.url;
+        });
+
+        return urls.sort();
+      }).then(function(urls) {
+        // event.ports[0] corresponds to the MessagePort that was transferred as part of the controlled page's
+        // call to controller.postMessage(). Therefore, event.ports[0].postMessage() will trigger the onmessage
+        // handler from the controlled page.
+        // It's up to you how to structure the messages that you send back; this is just one example.
+        event.ports[0].postMessage({
+          error: null,
+          urls: urls
+        });
+      });
+
+    default:
+      // This will be handled by the outer .catch().
+      throw Error('Unknown command: ' + event.data.command);
+  }
+
+}
 
 /////////////
 /// UPDATE //
