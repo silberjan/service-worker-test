@@ -66,6 +66,10 @@ self.addEventListener('fetch', handleFetch);
 // Service worker sync event
 self.addEventListener('sync', handleSync);
 
+// Communicate with service worker
+self.addEventListener('message', handleMessage);
+
+
 // init
 setupVideoCache();
 setupRequestStore();
@@ -89,13 +93,13 @@ function installServiceWorker(event) {
 
 function activateServiceWorker(event) {
 
-    console.log("🌑 Activating service worker version " + CACHE_VERSION + "...");
+  console.log("🌑 Activating service worker version " + CACHE_VERSION + "...");
 
-    event.waitUntil(
-      handleNewVersion().then(function() {
-        console.info("✔ Activated service worker version " + CACHE_VERSION);
-      })
-    );
+  event.waitUntil(
+    handleNewVersion().then(function() {
+      console.info("✔ Activated service worker version " + CACHE_VERSION);
+    })
+  );
 
 }
 
@@ -228,6 +232,10 @@ function handleNewSuccessfulResponse(request, response) {
     if (request.method === handler.method && handler.pattern.exec(request.url) != null) {
       if (handler.cache) {
         cache.put(request, response.clone());
+        broadcastMessage({
+          type: 'addToCache',
+          data: request.url
+        })
       }
       if (handler.bodyHandler) {
         const myHandler = handler;
@@ -627,6 +635,55 @@ function handleSync(event) {
       break;
 
   }
+}
+
+
+/////////////
+// MESSAGE //
+/////////////
+
+function handleMessage(event) {
+  console.log('Handling message event:', event);
+
+  switch (event.data.command) {
+    // This command returns a list of the URLs corresponding to the Request objects
+    // that serve as keys for the current cache.
+    case 'keys':
+      return cache.keys().then(function(requests) {
+        var urls = requests.map(function(request) {
+          return request.url;
+        });
+
+        return urls.sort();
+      }).then(function(urls) {
+        // event.ports[0] corresponds to the MessagePort that was transferred as part of the controlled page's
+        // call to controller.postMessage(). Therefore, event.ports[0].postMessage() will trigger the onmessage
+        // handler from the controlled page.
+        // It's up to you how to structure the messages that you send back; this is just one example.
+        event.ports[0].postMessage({
+          error: null,
+          urls: urls
+        });
+      });
+
+    // For more commands like 'add', 'delete' refer to:
+    // https://github.com/GoogleChrome/samples/blob/gh-pages/service-worker/post-message/service-worker.js#L103
+
+    default:
+      // This will be handled by the outer .catch().
+      throw Error('Unknown command: ' + event.data.command);
+  }
+
+}
+
+function broadcastMessage(message) {
+  // Send a message to each of the controlled pages.
+  // This will trigger navigator.serviceWorker.onmessage in each client.
+  return self.clients.matchAll().then(function(clients) {
+    return Promise.all(clients.map(function(client) {
+      return client.postMessage(message);
+    }));
+  });
 }
 
 
