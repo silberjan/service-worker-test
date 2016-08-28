@@ -36,9 +36,10 @@ var cache;
 // decide whether to use a fallback response
 var videoStates = [];
 var VideoState = Object.freeze({
-  UNKNOWN: "UNKNOWN",     // video is not known, i.e., not available
-  LOADING: "LOADING",     // video is currently loading
-  AVAILABLE: "AVAILABLE" // video is fully available in IndexedDB
+  UNKNOWN: "UNKNOWN",      // video is not known, i.e., not available
+  LOADING: "LOADING",      // video is currently loading
+  AVAILABLE: "AVAILABLE",  // video is fully available in IndexedDB
+  CORS: "CORS"             // remote server does not allow CORS requests
 });
 var VIDEO_CHUNK_SIZE = 10 * 1024 * 1024; // 10 MB
 
@@ -356,6 +357,12 @@ function handleVideoFetch(event) {
       // we seem to have the video already!
       returnVideoFromIndexedDB(event);
       break;
+      
+    case VideoState.CORS:
+      // we unsuccessfully tried to fetch the video in the past,
+      // try to fetch it again but let the request fall through
+      addVideoToIndexedDB(url);
+      break;
 
     case VideoState.UNKNOWN:
       // we do not have the video yet, add it
@@ -509,6 +516,7 @@ function returnVideoFromIndexedDB(event) {
 function addVideoToIndexedDB(url) {
   switch (getVideoState(url)) {
     case VideoState.UNKNOWN:
+    case VideoState.CORS:
       // we do not yet have the video, so load it and store it as a blob...
       updateVideoState(url, VideoState.LOADING);
 
@@ -517,6 +525,12 @@ function addVideoToIndexedDB(url) {
       //     transform streams might also be useful: https://streams.spec.whatwg.org/#ts
       var request = new Request(url);
       fetch(request).then(function(response) {
+        // check if the response is opaque
+        if (response.type == "opaque") {
+          updateVideoState(url, VideoState.CORS);
+          throw "Remote server returned opaque response, non-opaque needed.";
+        }
+        
         // we got the video, now convert it to a blob
         return response.blob();
       }).then(function(blob) {
